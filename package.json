@@ -12,7 +12,14 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "restore:supabase": "tsx scripts/supabase-restore.ts",
+    "migration:introspect": "tsx scripts/migration/schema-introspect.ts",
+    "migration:compare": "tsx scripts/migration/compare-schemas.ts",
+    "migration:etl": "tsx scripts/migration/migracao_legado_para_sistema.ts",
+    "migration:etl:dry": "tsx scripts/migration/migracao_legado_para_sistema.ts --dry-run",
+    "migration:validate": "tsx scripts/migration/validacao_migracao.ts",
+    "migration:apply-bridge": "tsx scripts/migration/apply-bridge-migration.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -58,6 +65,7 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
+    "pg-promise": "^12.6.2",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",

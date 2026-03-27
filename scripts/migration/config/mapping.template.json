@@ -1,0 +1,58 @@
+{
+  "$schema": "./mapping.schema.json",
+  "_comment": "Copie para mapping.json e preencha com base em legacy-schema.json + target-schema.json. Não commitar secrets.",
+  "loadOrder": [
+    "clientes",
+    "pedidos"
+  ],
+  "tables": {
+    "clientes": {
+      "entityType": "cliente",
+      "sourceTable": "cliente",
+      "targetTable": "clientes",
+      "sourcePk": "codigo_cliente",
+      "targetPk": "id",
+      "legacyColumnOnTarget": "legacy_codigo_cliente",
+      "defaults": {
+        "status": "ativo",
+        "tipo": "pj"
+      },
+      "columns": [
+        { "source": "nome_cliente", "target": "nome", "transform": "trim" },
+        { "source": "fantasia", "target": "fantasia", "transform": "trim" },
+        { "source": "email", "target": "email" },
+        { "source": "telefone", "target": "telefone" },
+        { "source": "celular", "target": "celular" },
+        { "source": "obs_cliente", "target": "observacao" }
+      ]
+    },
+    "pedidos": {
+      "entityType": "pedido",
+      "sourceTable": "pedido",
+      "targetTable": "pedidos",
+      "sourcePk": "codigo_pedido",
+      "targetPk": "id",
+      "legacyColumnOnTarget": "legacy_codigo_pedido",
+      "foreignKeys": [
+        {
+          "sourceColumn": "codigo_cliente",
+          "targetColumn": "cliente_id",
+          "mapsFromEntity": "cliente"
+        }
+      ],
+      "defaults": {
+        "tipo": "entrega_cacamba",
+        "tipo_locacao": "dia",
+        "status": "concluido",
+        "quantidade": 1,
+        "valor_unitario": 0,
+        "valor_desconto": 0,
+        "valor_total": 0
+      },
+      "columns": [
+        { "source": "obs_pedido", "target": "observacao" },
+        { "source": "data_pedido", "target": "data_pedido" }
+      ]
+    }
+  }
+}

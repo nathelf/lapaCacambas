@@ -1,0 +1,69 @@
+{
+  "loadOrder": ["clientes", "pedidos"],
+  "tables": {
+    "clientes": {
+      "entityType": "cliente",
+      "sourceTable": "cliente",
+      "targetTable": "clientes",
+      "sourcePk": "codigo_cliente",
+      "targetPk": "id",
+      "legacyColumnOnTarget": "legacy_codigo_cliente",
+      "columns": [
+        { "source": "nome_cliente", "target": "nome", "transform": "trim" },
+        { "source": "fantasia", "target": "fantasia", "transform": "trim" },
+        { "source": "e_mail", "target": "email", "transform": "trim" },
+        { "source": "fone", "target": "telefone" },
+        { "source": "celular", "target": "celular" },
+        { "source": "fax", "target": "fax" },
+        { "source": "cpf", "target": "cpf" },
+        { "source": "cnpj", "target": "cnpj" },
+        { "source": "rg", "target": "rg" },
+        { "source": "referencia_cli", "target": "referencia" },
+        { "source": "motivo", "target": "motivo_bloqueio" },
+        { "source": "observa", "target": "observacao" },
+        { "source": "endereco", "target": "endereco" },
+        { "source": "numero", "target": "numero" },
+        { "source": "complemento", "target": "complemento" },
+        { "source": "cep", "target": "cep" },
+        { "source": "bairro", "target": "bairro" },
+        { "source": "cidade", "target": "cidade" },
+        { "source": "estado", "target": "estado" },
+        { "source": "status", "target": "status", "transform": "legacy_cliente_status" },
+        { "source": "tipo", "target": "tipo", "transform": "legacy_char_tipo_cliente" }
+      ]
+    },
+    "pedidos": {
+      "entityType": "pedido",
+      "sourceTable": "pedido",
+      "targetTable": "pedidos",
+      "sourcePk": "codigo_pedido",
+      "targetPk": "id",
+      "legacyColumnOnTarget": "legacy_codigo_pedido",
+      "foreignKeys": [
+        {
+          "sourceColumn": "codigo_cliente",
+          "targetColumn": "cliente_id",
+          "mapsFromEntity": "cliente"
+        }
+      ],
+      "defaults": {
+        "tipo": "entrega_cacamba",
+        "tipo_locacao": "dia",
+        "quantidade": 1,
+        "valor_desconto": 0,
+        "faturado": false,
+        "status_fiscal": "nao_emitida"
+      },
+      "columns": [
+        { "source": "codigo_pedido", "target": "numero", "transform": "int_to_string" },
+        { "source": "data_pedido_colocada", "target": "data_pedido" },
+        { "source": "data_ret_prev", "target": "data_retirada_prevista" },
+        { "source": "valor", "target": "valor_total" },
+        { "source": "valor", "target": "valor_unitario", "transform": "valor_to_unitario_pedido" },
+        { "source": "qtde", "target": "quantidade" },
+        { "source": "status_pedido", "target": "status", "transform": "legacy_status_pedido" },
+        { "source": "obscoloca", "target": "observacao" }
+      ]
+    }
+  }
+}
