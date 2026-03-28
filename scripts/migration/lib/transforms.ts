@@ -1,13 +1,30 @@
 import type { TransformName } from "./mapping-types.ts";
 
-/** Mapeia rótulos legados para enums do sistema (ajuste conforme dados reais). */
+/** Mapeia rótulos legados para enums do sistema. */
 const STATUS_PEDIDO_MAP: Record<string, string> = {
+  // valores char do legado (D=Depositado, C=Cancelado, L=Locado, A=Aberto)
+  d: "concluido",
+  c: "cancelado",
+  l: "pendente_programacao",
+  a: "orcamento",
+  // valores textuais (fallback)
   aberto: "orcamento",
   pendente: "pendente_programacao",
   entregue: "concluido",
   concluido: "concluido",
   cancelado: "cancelado",
   faturado: "faturado",
+};
+
+const TIPO_LOCACAO_MAP: Record<string, string> = {
+  d: "dia",
+  s: "semana",
+  q: "quinzena",
+  m: "mes",
+  dia: "dia",
+  semana: "semana",
+  quinzena: "quinzena",
+  mes: "mes",
 };
 
 const TIPO_CLIENTE_MAP: Record<string, string> = {
@@ -17,22 +34,28 @@ const TIPO_CLIENTE_MAP: Record<string, string> = {
   pj: "pj",
 };
 
-/** status_cliente: legado costuma usar 1 char (ex.: A/I/B). */
+/**
+ * status_cliente legado: 0=ativo, 1=inativo, 2=bloqueado
+ * (também aceita A/I/B e ATIVO/INATIVO/BLOQUEADO para compatibilidade)
+ */
 function legacyClienteStatus(value: unknown): string {
   if (value == null) return "ativo";
   const s = String(value).trim().toUpperCase();
-  if (s === "A" || s === "ATIVO" || s === "1") return "ativo";
-  if (s === "I" || s === "INATIVO" || s === "2") return "inativo";
-  if (s === "B" || s === "BLOQUEADO" || s === "3") return "bloqueado";
+  if (s === "0" || s === "A" || s === "ATIVO") return "ativo";
+  if (s === "1" || s === "I" || s === "INATIVO") return "inativo";
+  if (s === "2" || s === "B" || s === "BLOQUEADO") return "bloqueado";
   return "ativo";
 }
 
-/** tipo_cliente: legado F/J ou PF/PJ */
+/**
+ * tipo_cliente legado: 0=pj, 1=pf
+ * (também aceita F/J e PF/PJ)
+ */
 function legacyCharTipoCliente(value: unknown): string {
   if (value == null) return "pj";
   const s = String(value).trim().toUpperCase();
-  if (s === "F" || s === "PF" || s === "1") return "pf";
-  if (s === "J" || s === "PJ" || s === "2") return "pj";
+  if (s === "1" || s === "F" || s === "PF") return "pf";
+  if (s === "0" || s === "J" || s === "PJ") return "pj";
   return "pj";
 }
 
@@ -48,9 +71,20 @@ export function applyTransform(
     if (typeof value === "string" && value.trim() === "") return null;
     return value;
   }
-  if (transform === "legacy_status_pedido" && value != null) {
-    const k = String(value).toLowerCase();
+  if (transform === "legacy_status_pedido") {
+    if (value == null) return "orcamento";
+    const k = String(value).trim().toLowerCase();
     return STATUS_PEDIDO_MAP[k] ?? "orcamento";
+  }
+  if (transform === "legacy_tipo_locacao") {
+    if (value == null) return "dia";
+    const k = String(value).trim().toLowerCase();
+    return TIPO_LOCACAO_MAP[k] ?? "dia";
+  }
+  if (transform === "char_to_bool") {
+    if (value == null) return false;
+    const s = String(value).trim().toUpperCase();
+    return s === "S" || s === "Y" || s === "TRUE" || s === "1";
   }
   if (transform === "legacy_tipo_cliente" && value != null) {
     const k = String(value).toLowerCase();

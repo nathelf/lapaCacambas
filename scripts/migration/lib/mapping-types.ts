@@ -5,6 +5,8 @@ export type TransformName =
   | "legacy_tipo_cliente"
   | "legacy_cliente_status"
   | "legacy_char_tipo_cliente"
+  | "legacy_tipo_locacao"
+  | "char_to_bool"
   | "int_to_string"
   | "valor_to_unitario_pedido";
 

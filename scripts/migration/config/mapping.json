@@ -48,10 +48,8 @@
       ],
       "defaults": {
         "tipo": "entrega_cacamba",
-        "tipo_locacao": "dia",
         "quantidade": 1,
         "valor_desconto": 0,
-        "faturado": false,
         "status_fiscal": "nao_emitida"
       },
       "columns": [
@@ -62,6 +60,8 @@
         { "source": "valor", "target": "valor_unitario", "transform": "valor_to_unitario_pedido" },
         { "source": "qtde", "target": "quantidade" },
         { "source": "status_pedido", "target": "status", "transform": "legacy_status_pedido" },
+        { "source": "tipo_locacao", "target": "tipo_locacao", "transform": "legacy_tipo_locacao" },
+        { "source": "faturado", "target": "faturado", "transform": "char_to_bool" },
         { "source": "obscoloca", "target": "observacao" }
       ]
     }
