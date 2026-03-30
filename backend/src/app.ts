@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { fiscalRouter } from './modules/fiscal/fiscal.controller';
 import { financeiroRouter, webhookRouter } from './modules/boleto/financeiro.controller';
+import { authRouter } from './modules/auth/auth.controller';
 import { requireAuth } from './middlewares/auth.middleware';
 import { errorMiddleware } from './middlewares/error.middleware';
 
@@ -13,6 +14,9 @@ export function createApp() {
   app.get('/health', (_req, res) => {
     res.json({ ok: true, service: 'fiscal-backend' });
   });
+
+  // Rotas de autenticação — públicas (login/refresh) e protegidas (logout/me)
+  app.use('/api/auth', authRouter);
 
   app.use('/api/fiscal', requireAuth(['administrador', 'fiscal', 'gestor', 'atendimento']), fiscalRouter);
   app.use('/api', webhookRouter);
