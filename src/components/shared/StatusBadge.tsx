@@ -1,4 +1,4 @@
-import { STATUS_PEDIDO_LABELS, STATUS_FISCAL_LABELS, type StatusPedido, type StatusFiscal } from '@/types/enums';
+import { STATUS_PEDIDO_LABELS, STATUS_NOTA_FISCAL_LABELS, type StatusPedido, type StatusNotaFiscal } from '@/types/enums';
 
 interface StatusBadgeProps {
   status: string;
@@ -40,7 +40,7 @@ const statusClassMap: Record<string, string> = {
 
 export function StatusBadge({ status, labels }: StatusBadgeProps) {
   const cls = statusClassMap[status] || 'status-orcamento';
-  const label = labels?.[status] || STATUS_PEDIDO_LABELS[status as StatusPedido] || STATUS_FISCAL_LABELS[status as StatusFiscal] || status.replace(/_/g, ' ');
+  const label = labels?.[status] || STATUS_PEDIDO_LABELS[status as StatusPedido] || STATUS_NOTA_FISCAL_LABELS[status as StatusNotaFiscal] || status.replace(/_/g, ' ');
 
   return (
     <span className={`status-badge ${cls}`}>

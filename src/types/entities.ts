@@ -1,4 +1,4 @@
-import type { StatusPedido, StatusCliente, TipoCliente, StatusCacamba, StatusVeiculo, StatusMotorista, StatusFatura, StatusBoleto, StatusConta, TipoLocacao, StatusMaterial, StatusFiscal } from './enums';
+import type { StatusPedido, StatusCliente, TipoCliente, StatusCacamba, StatusVeiculo, StatusMotorista, StatusFatura, StatusBoleto, StatusConta, TipoLocacao, StatusMaterial, StatusNotaFiscal } from './enums';
 
 // ===== DOMAIN ENTITIES =====
 // Mapped from legacy DB fields to modern naming
@@ -73,7 +73,7 @@ export interface NotaFiscal {
   chaveAcesso: string | null;
   dataEmissao: string;
   valorTotal: number;
-  status: StatusFiscal;
+  status: StatusNotaFiscal;
   clienteId: number;
   nomeCliente?: string;
   pedidoIds: number[];
@@ -85,7 +85,7 @@ export interface NotaFiscal {
 }
 
 export interface PedidoFiscal {
-  statusFiscal: StatusFiscal;
+  statusFiscal: StatusNotaFiscal;
   notaFiscalId: number | null;
   notaFiscalNumero: string | null;
   notaFiscalData: string | null;
