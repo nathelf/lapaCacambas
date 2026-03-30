@@ -10,5 +10,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["backend/src/**/*.ts"]
+  "include": ["backend/src/**/*.ts", "shared/**/*.ts"]
 }
