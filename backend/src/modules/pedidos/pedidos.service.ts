@@ -251,7 +251,7 @@ export async function mudarStatus(id: number, dto: UpdateStatusPedidoDto, userId
     updated_at: new Date().toISOString(),
   };
 
-  // Quando pedido é concluído, marca data de faturamento futuro
+  // Quando pedido é faturado, registra a data
   if (novoStatus === 'faturado') {
     updates.faturado = true;
     updates.data_faturamento = new Date().toISOString();
@@ -265,6 +265,20 @@ export async function mudarStatus(id: number, dto: UpdateStatusPedidoDto, userId
     .single();
 
   if (error || !data) throw new Error('Falha ao atualizar status.');
+
+  // Quando pedido vai para "programado", cria execução automaticamente
+  // A execução fica com status "pendente" aguardando logística atribuir motorista/veículo
+  if (novoStatus === 'programado') {
+    const pedido = data as PedidoRow;
+    await supabaseAdmin.from('execucoes').insert({
+      pedido_id: id,
+      tipo: pedido.tipo,
+      status: 'pendente',
+      motorista_id: null,
+      veiculo_id: null,
+    });
+  }
+
   return toDto(data as PedidoRow);
 }
 
