@@ -172,31 +172,17 @@ export async function fetchVeiculosAll() {
 
 // ===== PEDIDOS =====
 export async function fetchPedidos(filters?: { status?: string; clienteId?: number; search?: string }) {
-  let query = supabase.from('pedidos').select('*, clientes!inner(nome, fantasia)').is('deleted_at', null).order('created_at', { ascending: false });
-  if (filters?.status) query = query.eq('status', filters.status as any);
-  if (filters?.clienteId) query = query.eq('cliente_id', filters.clienteId);
-  if (filters?.search) query = query.or(`numero.ilike.%${filters.search}%`);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
+  const params = new URLSearchParams();
+  if (filters?.status)    params.set('status', filters.status);
+  if (filters?.clienteId) params.set('clienteId', String(filters.clienteId));
+  if (filters?.search)    params.set('busca', filters.search);
+  const result = await backendRequest<{ data: any[]; total: number }>(`/api/pedidos?${params.toString()}`);
+  return result?.data ?? [];
 }
 
 export async function fetchPedido(id: number) {
-  const { data, error } = await supabase
-    .from('pedidos')
-    .select(`
-      *,
-      clientes(nome, fantasia, cpf, cnpj, inscricao_municipal, inscricao_estadual,
-               endereco, numero, complemento, bairro, cidade, estado, cep, email, telefone),
-      enderecos_entrega(endereco, numero, bairro, cidade, estado, cep, contato, referencia),
-      cacambas(descricao, capacidade),
-      servicos(descricao, codigo_fiscal, aliquota),
-      motoristas_colocacao:motoristas!motorista_colocacao_id(id, nome),
-      veiculos_colocacao:veiculos!veiculo_colocacao_id(id, placa, modelo)
-    `)
-    .eq('id', id)
-    .single();
-  if (error) throw error;
+  const pedido = await backendRequest<any>(`/api/pedidos/${id}`);
+  // Busca faturas e boletos vinculados direto no Supabase (ainda não tem endpoint no backend)
   const [faturaVinc, boletosVinc] = await Promise.all([
     supabase
       .from('fatura_pedidos')
@@ -208,43 +194,25 @@ export async function fetchPedido(id: number) {
       .eq('pedido_id', id)
       .order('created_at', { ascending: false }),
   ]);
-
   return {
-    ...data,
+    ...pedido,
     faturas_vinculadas: faturaVinc.data || [],
     boletos_vinculados: boletosVinc.data || [],
   };
 }
 
 export async function createPedido(pedido: any) {
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data, error } = await supabase.from('pedidos').insert({ ...pedido, created_by: user?.id } as any).select().single();
-  if (error) throw error;
-  await logAuditoria('criacao', 'pedidos', data.id, null, data);
-  await supabase.from('pedido_historico').insert({
-    pedido_id: data.id,
-    status_novo: data.status,
-    observacao: 'Pedido criado',
-    usuario_id: user?.id,
-  } as any);
-  return data;
+  return backendRequest<any>('/api/pedidos', {
+    method: 'POST',
+    body: JSON.stringify(pedido),
+  });
 }
 
 export async function updatePedidoStatus(id: number, statusNovo: string, observacao?: string, extraFields?: any) {
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: old } = await supabase.from('pedidos').select('status').eq('id', id).single();
-  const updateData: any = { status: statusNovo, updated_by: user?.id, ...extraFields };
-  const { data, error } = await supabase.from('pedidos').update(updateData as any).eq('id', id).select().single();
-  if (error) throw error;
-  await supabase.from('pedido_historico').insert({
-    pedido_id: id,
-    status_anterior: old?.status,
-    status_novo: statusNovo,
-    observacao,
-    usuario_id: user?.id,
-  } as any);
-  await logAuditoria('mudanca_status', 'pedidos', id, { status: old?.status }, { status: statusNovo });
-  return data;
+  return backendRequest<any>(`/api/pedidos/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: statusNovo, motivo: observacao, ...extraFields }),
+  });
 }
 
 export async function fetchPedidoHistorico(pedidoId: number) {

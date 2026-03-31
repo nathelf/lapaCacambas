@@ -11,6 +11,7 @@ import { enderecosRouter } from './modules/enderecos/enderecos.controller';
 import { contatosRouter } from './modules/contatos/contatos.controller';
 import { servicosRouter } from './modules/servicos/servicos.controller';
 import { financeiroRouter, webhookRouter } from './modules/boleto/financeiro.controller';
+import { pedidosRouter } from './modules/pedidos/pedidos.controller';
 import { authRouter } from './modules/auth/auth.controller';
 import { requireAuth } from './middlewares/auth.middleware';
 import { errorMiddleware } from './middlewares/error.middleware';
@@ -36,6 +37,7 @@ export function createApp() {
   app.use('/api/enderecos', requireAuth(['administrador', 'atendimento', 'gestor', 'fiscal']), enderecosRouter);
   app.use('/api/contatos', requireAuth(['administrador', 'atendimento', 'gestor', 'fiscal']), contatosRouter);
   app.use('/api/servicos', requireAuth(['administrador', 'atendimento', 'gestor', 'fiscal']), servicosRouter);
+  app.use('/api/pedidos', requireAuth(['administrador', 'atendimento', 'gestor', 'fiscal', 'operador']), pedidosRouter);
   app.use('/api/fiscal', requireAuth(['administrador', 'fiscal', 'gestor', 'atendimento']), fiscalRouter);
   app.use('/api', webhookRouter);
   app.use('/api', requireAuth(['administrador', 'financeiro', 'fiscal', 'gestor', 'atendimento']), financeiroRouter);
