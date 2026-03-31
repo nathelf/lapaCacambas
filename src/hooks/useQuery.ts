@@ -6,6 +6,13 @@ export function useClientes(search?: string, page = 1) {
   return useQuery({ queryKey: ['clientes', search, page], queryFn: () => api.fetchClientes(search, page) });
 }
 
+export function useClientesLookup(search?: string) {
+  return useQuery({
+    queryKey: ['clientes-lookup', search],
+    queryFn: () => api.fetchClientesLookup(search),
+  });
+}
+
 export function useCliente(id: number | undefined) {
   return useQuery({ queryKey: ['cliente', id], queryFn: () => api.fetchCliente(id!), enabled: !!id });
 }
@@ -14,7 +21,10 @@ export function useCreateCliente() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: api.createCliente,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['clientes'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clientes'] });
+      qc.invalidateQueries({ queryKey: ['clientes-lookup'] });
+    },
   });
 }
 
@@ -22,7 +32,10 @@ export function useUpdateCliente() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: any }) => api.updateCliente(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['clientes'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clientes'] });
+      qc.invalidateQueries({ queryKey: ['clientes-lookup'] });
+    },
   });
 }
 

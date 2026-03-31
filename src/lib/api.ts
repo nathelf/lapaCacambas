@@ -50,6 +50,26 @@ export async function fetchClientes(search?: string, page = 1, limit = 20) {
   return { data: data ?? [], total: count ?? 0 };
 }
 
+export async function fetchClientesLookup(search?: string) {
+  let query = supabase
+    .from('clientes')
+    .select('id, nome, fantasia, cpf, cnpj')
+    .is('deleted_at', null)
+    .limit(50);
+
+  if (search) {
+    query = query
+      .or(`nome.ilike.%${search}%,fantasia.ilike.%${search}%,cpf.ilike.%${search}%,cnpj.ilike.%${search}%`)
+      .order('nome');
+  } else {
+    query = query.order('created_at', { ascending: false });
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function fetchCliente(id: number) {
   const { data, error } = await supabase.from('clientes').select('*').eq('id', id).single();
   if (error) throw error;

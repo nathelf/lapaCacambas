@@ -5,9 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { ArrowLeft, Save, Loader2, ChevronsUpDown, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { useClientes, useEnderecosEntrega, useCacambas, useCreatePedido } from '@/hooks/useQuery';
+import { useClientesLookup, useEnderecosEntrega, useCacambas, useCreatePedido } from '@/hooks/useQuery';
 
 const tiposLocacao = [
   { value: 'dia',      label: 'Diária',    priceKey: 'preco_dia' },
@@ -20,6 +23,9 @@ export default function PedidoFormPage() {
   const navigate = useNavigate();
 
   const [clienteId, setClienteId] = useState<number | ''>('');
+  const [clienteOpen, setClienteOpen] = useState(false);
+  const [clienteBusca, setClienteBusca] = useState('');
+  const [clienteBuscaDebounced, setClienteBuscaDebounced] = useState('');
   const [enderecoId, setEnderecoId] = useState<number | ''>('');
   const [cacambaId, setCacambaId] = useState<number | ''>('');
   const [tipoLocacao, setTipoLocacao] = useState<string>('dia');
@@ -29,8 +35,13 @@ export default function PedidoFormPage() {
   const [dataRetPrev, setDataRetPrev] = useState('');
   const [obs, setObs] = useState('');
 
-  const { data: clientesResult, isLoading: loadingClientes } = useClientes();
-  const clientes = (clientesResult as any)?.data ?? clientesResult ?? [];
+  useEffect(() => {
+    const t = setTimeout(() => setClienteBuscaDebounced(clienteBusca), 300);
+    return () => clearTimeout(t);
+  }, [clienteBusca]);
+
+  const buscaAtiva = clienteBuscaDebounced.length >= 3 ? clienteBuscaDebounced : undefined;
+  const { data: clientes = [], isLoading: loadingClientes } = useClientesLookup(buscaAtiva);
   const { data: enderecos = [], isLoading: loadingEnderecos } = useEnderecosEntrega(
     clienteId ? Number(clienteId) : undefined
   );
@@ -79,7 +90,7 @@ export default function PedidoFormPage() {
     }
   };
 
-  const clienteSelecionado = (clientes as any[]).find?.((c: any) => c.id === clienteId);
+  const clienteSelecionado = (clientes as any[]).find((c: any) => c.id === clienteId);
   const isSaving = createPedido.isPending;
 
   return (
@@ -109,21 +120,54 @@ export default function PedidoFormPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">Cliente <span className="text-destructive">*</span></Label>
-                <select
-                  value={clienteId}
-                  onChange={e => setClienteId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full h-9 px-3 rounded-md border bg-background text-sm"
-                  disabled={loadingClientes}
-                >
-                  <option value="">
-                    {loadingClientes ? 'Carregando...' : 'Selecione o cliente'}
-                  </option>
-                  {(clientes as any[]).map((c: any) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome}{c.fantasia ? ` (${c.fantasia})` : ''}
-                    </option>
-                  ))}
-                </select>
+                <Popover open={clienteOpen} onOpenChange={setClienteOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full h-9 justify-between font-normal"
+                      disabled={loadingClientes}
+                    >
+                      <span className="truncate">
+                        {clienteId
+                          ? (clientes as any[]).find((c: any) => c.id === clienteId)
+                              ? (() => { const c = (clientes as any[]).find((c: any) => c.id === clienteId); return c.fantasia ? `${c.fantasia} — ${c.nome}` : c.nome; })()
+                              : 'Carregando...'
+                          : loadingClientes ? 'Carregando...' : 'Selecione o cliente'}
+                      </span>
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput
+                        placeholder="Digite 3 letras para buscar..."
+                        value={clienteBusca}
+                        onValueChange={setClienteBusca}
+                      />
+                      <CommandList>
+                        <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                        <CommandGroup>
+                          {(clientes as any[]).map((c: any) => (
+                              <CommandItem
+                                key={c.id}
+                                value={String(c.id)}
+                                onSelect={() => {
+                                  setClienteId(c.id);
+                                  setClienteBusca('');
+                                  setClienteOpen(false);
+                                }}
+                              >
+                                <Check className={cn('mr-2 h-4 w-4', clienteId === c.id ? 'opacity-100' : 'opacity-0')} />
+                                <span>{c.fantasia ? `${c.fantasia} — ` : ''}{c.nome}</span>
+                                <span className="ml-2 text-xs text-muted-foreground">{c.cpf ?? c.cnpj ?? ''}</span>
+                              </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div className="space-y-1.5">
