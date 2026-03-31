@@ -2,8 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '@/lib/api';
 
 // ===== CLIENTES =====
-export function useClientes(search?: string) {
-  return useQuery({ queryKey: ['clientes', search], queryFn: () => api.fetchClientes(search) });
+export function useClientes(search?: string, page = 1) {
+  return useQuery({ queryKey: ['clientes', search, page], queryFn: () => api.fetchClientes(search, page) });
 }
 
 export function useCliente(id: number | undefined) {
@@ -158,6 +158,43 @@ export function useVeiculosAll() {
 
 export function useServicos() {
   return useQuery({ queryKey: ['servicos'], queryFn: api.fetchServicos });
+}
+
+export function useServicosAll() {
+  return useQuery({ queryKey: ['servicos-all'], queryFn: api.fetchServicosAll });
+}
+
+export function useCreateServico() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.createServico,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['servicos-all'] });
+      qc.invalidateQueries({ queryKey: ['servicos'] });
+    },
+  });
+}
+
+export function useUpdateServico() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => api.updateServico(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['servicos-all'] });
+      qc.invalidateQueries({ queryKey: ['servicos'] });
+    },
+  });
+}
+
+export function useToggleServico() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.toggleServico,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['servicos-all'] });
+      qc.invalidateQueries({ queryKey: ['servicos'] });
+    },
+  });
 }
 
 export function useContatos(clienteId: number | undefined) {

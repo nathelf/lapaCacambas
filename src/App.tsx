@@ -27,6 +27,7 @@ import ConfiguracoesPage from "./pages/configuracoes/ConfiguracoesPage";
 import RelatoriosPage from "./pages/relatorios/RelatoriosPage";
 import UsuariosPage from "./pages/usuarios/UsuariosPage";
 import ComercialPage from "./pages/comercial/ComercialPage";
+import ServicosPage from "./pages/servicos/ServicosPage";
 import OrdensServicoPage from "./pages/ordens-servico/OrdensServicoPage";
 import MaquinasPage from "./pages/maquinas/MaquinasPage";
 import RotasPage from "./pages/rotas/RotasPage";
@@ -56,6 +57,7 @@ function ProtectedRoutes() {
         <Route path="/ordens-servico" element={<OrdensServicoPage />} />
         <Route path="/obras" element={<ObrasPage />} />
         <Route path="/comercial" element={<ComercialPage />} />
+        <Route path="/servicos" element={<ServicosPage />} />
         <Route path="/cacambas" element={<CacambasPage />} />
         <Route path="/veiculos" element={<VeiculosPage />} />
         <Route path="/motoristas" element={<MotoristasPage />} />

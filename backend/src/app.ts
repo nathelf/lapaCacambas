@@ -9,6 +9,7 @@ import { motoristasRouter } from './modules/motoristas/motoristas.controller';
 import { obrasRouter } from './modules/obras/obras.controller';
 import { enderecosRouter } from './modules/enderecos/enderecos.controller';
 import { contatosRouter } from './modules/contatos/contatos.controller';
+import { servicosRouter } from './modules/servicos/servicos.controller';
 import { financeiroRouter, webhookRouter } from './modules/boleto/financeiro.controller';
 import { authRouter } from './modules/auth/auth.controller';
 import { requireAuth } from './middlewares/auth.middleware';
@@ -34,6 +35,7 @@ export function createApp() {
   app.use('/api/obras', requireAuth(['administrador', 'atendimento', 'gestor', 'fiscal']), obrasRouter);
   app.use('/api/enderecos', requireAuth(['administrador', 'atendimento', 'gestor', 'fiscal']), enderecosRouter);
   app.use('/api/contatos', requireAuth(['administrador', 'atendimento', 'gestor', 'fiscal']), contatosRouter);
+  app.use('/api/servicos', requireAuth(['administrador', 'atendimento', 'gestor', 'fiscal']), servicosRouter);
   app.use('/api/fiscal', requireAuth(['administrador', 'fiscal', 'gestor', 'atendimento']), fiscalRouter);
   app.use('/api', webhookRouter);
   app.use('/api', requireAuth(['administrador', 'financeiro', 'fiscal', 'gestor', 'atendimento']), financeiroRouter);

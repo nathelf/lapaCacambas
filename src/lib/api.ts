@@ -32,12 +32,22 @@ export async function logAuditoria(acao: string, entidade: string, entidadeId?: 
 }
 
 // ===== CLIENTES =====
-export async function fetchClientes(search?: string) {
-  let query = supabase.from('clientes').select('*').is('deleted_at', null).order('nome');
+export async function fetchClientes(search?: string, page = 1, limit = 20) {
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = supabase
+    .from('clientes')
+    .select('*', { count: 'exact' })
+    .is('deleted_at', null)
+    .order('nome')
+    .range(from, to);
+
   if (search) query = query.or(`nome.ilike.%${search}%,fantasia.ilike.%${search}%,cpf.ilike.%${search}%,cnpj.ilike.%${search}%`);
-  const { data, error } = await query;
+
+  const { data, error, count } = await query;
   if (error) throw error;
-  return data;
+  return { data: data ?? [], total: count ?? 0 };
 }
 
 export async function fetchCliente(id: number) {
@@ -116,6 +126,22 @@ export async function fetchServicos() {
   const { data, error } = await supabase.from('servicos').select('*').eq('ativo', true).order('descricao');
   if (error) throw error;
   return data;
+}
+
+export async function fetchServicosAll() {
+  return backendRequest<any[]>('/api/servicos');
+}
+
+export async function createServico(dto: { descricao: string; codigoFiscal?: string; aliquota?: number }) {
+  return backendRequest<any>('/api/servicos', { method: 'POST', body: JSON.stringify(dto) });
+}
+
+export async function updateServico(id: number, dto: { descricao?: string; codigoFiscal?: string; aliquota?: number; ativo?: boolean }) {
+  return backendRequest<any>(`/api/servicos/${id}`, { method: 'PUT', body: JSON.stringify(dto) });
+}
+
+export async function toggleServico(id: number) {
+  return backendRequest<any>(`/api/servicos/${id}/toggle`, { method: 'PATCH' });
 }
 
 // ===== MOTORISTAS =====
