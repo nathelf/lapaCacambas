@@ -172,17 +172,31 @@ export async function fetchVeiculosAll() {
 
 // ===== PEDIDOS =====
 export async function fetchPedidos(filters?: { status?: string; clienteId?: number; search?: string }) {
-  const params = new URLSearchParams();
-  if (filters?.status)    params.set('status', filters.status);
-  if (filters?.clienteId) params.set('clienteId', String(filters.clienteId));
-  if (filters?.search)    params.set('busca', filters.search);
-  const result = await backendRequest<{ data: any[]; total: number }>(`/api/pedidos?${params.toString()}`);
-  return result?.data ?? [];
+  let query = supabase.from('pedidos').select('*, clientes!inner(nome, fantasia)').is('deleted_at', null).order('created_at', { ascending: false });
+  if (filters?.status)    query = query.eq('status', filters.status as any);
+  if (filters?.clienteId) query = query.eq('cliente_id', filters.clienteId);
+  if (filters?.search)    query = query.or(`numero.ilike.%${filters.search}%`);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
 }
 
 export async function fetchPedido(id: number) {
-  const pedido = await backendRequest<any>(`/api/pedidos/${id}`);
-  // Busca faturas e boletos vinculados direto no Supabase (ainda não tem endpoint no backend)
+  const { data, error } = await supabase
+    .from('pedidos')
+    .select(`
+      *,
+      clientes(nome, fantasia, cpf, cnpj, inscricao_municipal, inscricao_estadual,
+               endereco, numero, complemento, bairro, cidade, estado, cep, email, telefone),
+      enderecos_entrega(endereco, numero, bairro, cidade, estado, cep, contato, referencia),
+      cacambas(descricao, capacidade),
+      servicos(descricao, codigo_fiscal, aliquota),
+      motoristas_colocacao:motoristas!motorista_colocacao_id(id, nome),
+      veiculos_colocacao:veiculos!veiculo_colocacao_id(id, placa, modelo)
+    `)
+    .eq('id', id)
+    .single();
+  if (error) throw error;
   const [faturaVinc, boletosVinc] = await Promise.all([
     supabase
       .from('fatura_pedidos')
@@ -195,7 +209,7 @@ export async function fetchPedido(id: number) {
       .order('created_at', { ascending: false }),
   ]);
   return {
-    ...pedido,
+    ...data,
     faturas_vinculadas: faturaVinc.data || [],
     boletos_vinculados: boletosVinc.data || [],
   };

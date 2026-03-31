@@ -29,7 +29,8 @@ export default function PedidoFormPage() {
   const [dataRetPrev, setDataRetPrev] = useState('');
   const [obs, setObs] = useState('');
 
-  const { data: clientes = [], isLoading: loadingClientes } = useClientes();
+  const { data: clientesResult, isLoading: loadingClientes } = useClientes();
+  const clientes = (clientesResult as any)?.data ?? clientesResult ?? [];
   const { data: enderecos = [], isLoading: loadingEnderecos } = useEnderecosEntrega(
     clienteId ? Number(clienteId) : undefined
   );
@@ -59,19 +60,17 @@ export default function PedidoFormPage() {
 
     try {
       await createPedido.mutateAsync({
-        cliente_id: Number(clienteId),
-        endereco_entrega_id: Number(enderecoId),
-        cacamba_id: Number(cacambaId),
+        clienteId: Number(clienteId),
+        enderecoEntregaId: Number(enderecoId),
+        cacambaId: Number(cacambaId),
         tipo: 'entrega_cacamba',
-        tipo_locacao: tipoLocacao,
+        tipoLocacao: tipoLocacao,
         quantidade,
-        valor_unitario: valor / (quantidade || 1),
-        valor_total: valor,
-        data_pedido: new Date().toISOString().split('T')[0],
-        data_desejada: dataDesejada || null,
-        data_retirada_prevista: dataRetPrev || null,
-        observacao: obs || null,
-        status: 'orcamento',
+        valorUnitario: valor / (quantidade || 1),
+        valorDesconto: 0,
+        dataDesejada: dataDesejada || undefined,
+        dataRetiradaPrevista: dataRetPrev || undefined,
+        observacao: obs || undefined,
       });
       toast.success('Pedido criado com sucesso!');
       navigate('/pedidos');
@@ -80,7 +79,7 @@ export default function PedidoFormPage() {
     }
   };
 
-  const clienteSelecionado = (clientes as any[]).find((c: any) => c.id === clienteId);
+  const clienteSelecionado = (clientes as any[]).find?.((c: any) => c.id === clienteId);
   const isSaving = createPedido.isPending;
 
   return (
