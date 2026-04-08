@@ -206,6 +206,15 @@ export const STATUS_CACAMBA_LABELS: Record<StatusCacamba, string> = {
   [StatusCacamba.INDISPONIVEL]: 'Indisponível',
 };
 
+export const STATUS_EXECUCAO_LABELS: Record<StatusExecucao, string> = {
+  [StatusExecucao.PENDENTE]:   'Pendente',
+  [StatusExecucao.EM_ROTA]:    'Em Rota',
+  [StatusExecucao.NO_LOCAL]:   'No Local',
+  [StatusExecucao.EXECUTANDO]: 'Executando',
+  [StatusExecucao.CONCLUIDA]:  'Concluída',
+  [StatusExecucao.CANCELADA]:  'Cancelada',
+};
+
 export const APP_ROLE_LABELS: Record<AppRole, string> = {
   [AppRole.ADMINISTRADOR]: 'Administrador',
   [AppRole.ATENDIMENTO]:   'Atendimento',

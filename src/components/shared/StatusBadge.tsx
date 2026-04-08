@@ -36,6 +36,14 @@ const statusClassMap: Record<string, string> = {
   nao_emitida: 'status-orcamento',
   emitida: 'status-concluido',
   erro: 'status-cancelado',
+  // execução / logística
+  no_local: 'status-execucao',
+  executando: 'status-em-rota',
+  concluida: 'status-concluido',
+  cancelada: 'status-cancelado',
+  // rota
+  planejada: 'status-programado',
+  em_andamento: 'status-em-rota',
 };
 
 export function StatusBadge({ status, labels }: StatusBadgeProps) {

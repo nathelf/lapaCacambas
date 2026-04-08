@@ -286,3 +286,84 @@ export function useRelatorioInadimplencia(filtros: api.FiltrosRelatorio, enabled
     enabled,
   });
 }
+
+// ===== LOGÍSTICA =====
+
+export function useExecucoes(params?: { status?: string; data?: string; semAtribuicao?: boolean }) {
+  return useQuery({
+    queryKey: ['execucoes', params],
+    queryFn: () => api.fetchExecucoes(params),
+    refetchInterval: 30_000, // atualiza a cada 30s para refletir movimentação em campo
+  });
+}
+
+export function useRotas(params?: { data?: string; motoristaId?: number; status?: string }) {
+  return useQuery({
+    queryKey: ['rotas', params],
+    queryFn: () => api.fetchRotas(params),
+    refetchInterval: 30_000,
+  });
+}
+
+export function useAtribuirExecucao() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, motoristaId, veiculoId }: { id: number; motoristaId: number; veiculoId: number }) =>
+      api.atribuirExecucao(id, motoristaId, veiculoId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['execucoes'] }),
+  });
+}
+
+export function useStatusExecucao() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status, observacao }: { id: number; status: string; observacao?: string }) =>
+      api.atualizarStatusExecucao(id, status, { observacao }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['execucoes'] });
+      qc.invalidateQueries({ queryKey: ['pedidos'] });
+    },
+  });
+}
+
+export function useCriarRota() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { data: string; motoristaId: number; veiculoId: number; observacao?: string }) =>
+      api.criarRota(dto),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rotas'] }),
+  });
+}
+
+export function useStatusRota() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      api.atualizarStatusRota(id, status),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rotas'] }),
+  });
+}
+
+export function useAdicionarParada() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ rotaId, dto }: { rotaId: number; dto: { pedidoId?: number; ordem: number; endereco?: string; tipo?: string } }) =>
+      api.adicionarParadaRota(rotaId, dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rotas'] });
+      qc.invalidateQueries({ queryKey: ['execucoes'] });
+    },
+  });
+}
+
+export function useRemoverParada() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ rotaId, paradaId }: { rotaId: number; paradaId: number }) =>
+      api.removerParadaRota(rotaId, paradaId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['rotas'] });
+      qc.invalidateQueries({ queryKey: ['execucoes'] });
+    },
+  });
+}

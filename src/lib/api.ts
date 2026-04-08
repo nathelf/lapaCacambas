@@ -579,3 +579,64 @@ export async function fetchRelatorioInadimplencia(filtros: FiltrosRelatorio) {
   if (error) throw error;
   return data || [];
 }
+
+// ─── Logística ────────────────────────────────────────────────────────────────
+
+export async function fetchExecucoes(params?: { status?: string; data?: string; semAtribuicao?: boolean }) {
+  const qs = new URLSearchParams();
+  if (params?.status)        qs.set('status', params.status);
+  if (params?.data)          qs.set('data', params.data);
+  if (params?.semAtribuicao) qs.set('semAtribuicao', 'true');
+  return backendRequest<any[]>(`/api/logistica/execucoes?${qs}`);
+}
+
+export async function atribuirExecucao(id: number, motoristaId: number, veiculoId: number) {
+  return backendRequest<any>(`/api/logistica/execucoes/${id}/atribuir`, {
+    method: 'PUT',
+    body: JSON.stringify({ motoristaId, veiculoId }),
+  });
+}
+
+export async function atualizarStatusExecucao(id: number, status: string, extra?: { observacao?: string }) {
+  return backendRequest<any>(`/api/logistica/execucoes/${id}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status, ...extra }),
+  });
+}
+
+export async function fetchRotas(params?: { data?: string; motoristaId?: number; status?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.data)        qs.set('data', params.data);
+  if (params?.motoristaId) qs.set('motoristaId', String(params.motoristaId));
+  if (params?.status)      qs.set('status', params.status);
+  return backendRequest<any[]>(`/api/logistica/rotas?${qs}`);
+}
+
+export async function fetchRota(id: number) {
+  return backendRequest<any>(`/api/logistica/rotas/${id}`);
+}
+
+export async function criarRota(dto: { data: string; motoristaId: number; veiculoId: number; observacao?: string }) {
+  return backendRequest<any>('/api/logistica/rotas', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function atualizarStatusRota(id: number, status: string) {
+  return backendRequest<any>(`/api/logistica/rotas/${id}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function adicionarParadaRota(rotaId: number, dto: { pedidoId?: number; ordem: number; endereco?: string; tipo?: string }) {
+  return backendRequest<any>(`/api/logistica/rotas/${rotaId}/paradas`, {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function removerParadaRota(rotaId: number, paradaId: number) {
+  return backendRequest<void>(`/api/logistica/rotas/${rotaId}/paradas/${paradaId}`, { method: 'DELETE' });
+}

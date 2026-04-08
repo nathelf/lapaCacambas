@@ -18,8 +18,8 @@ backend/src/             ← importa direto de ../../../../shared/enums
 
 ## 2. Rotas da API
 
-Base URL local: `http://localhost:3000`
-Base URL produção: variável de ambiente `VITE_API_URL`
+Base URL local: `http://localhost:3333`
+Base URL produção: variável de ambiente `VITE_BACKEND_URL`
 
 ### Autenticação
 | Método | Rota | Roles | Descrição |
@@ -104,6 +104,72 @@ Base URL produção: variável de ambiente `VITE_API_URL`
 | POST | /api/motoristas | adm, gestor | Criar |
 | PUT | /api/motoristas/:id | adm, gestor | Atualizar |
 
+### Serviços
+| Método | Rota | Roles | Descrição |
+|--------|------|-------|-----------|
+| GET | /api/servicos | adm, atend, gestor, fiscal | Listar |
+| POST | /api/servicos | adm, gestor | Criar |
+| PUT | /api/servicos/:id | adm, gestor | Atualizar |
+| PATCH | /api/servicos/:id/toggle | adm, gestor | Ativar/desativar |
+
+### Pedidos (Nathalia)
+| Método | Rota | Roles | Descrição |
+|--------|------|-------|-----------|
+| GET | /api/pedidos?status=X&clienteId=N&search=X | adm, atend, gestor, fiscal, operador | Listar (paginado) |
+| GET | /api/pedidos/:id | adm, atend, gestor, fiscal, operador | Buscar por ID |
+| POST | /api/pedidos | adm, atend, gestor, fiscal, operador | Criar |
+| PUT | /api/pedidos/:id | adm, atend, gestor, fiscal, operador | Atualizar |
+| PATCH | /api/pedidos/:id/status | adm, atend, gestor, fiscal, operador | Avançar status |
+| DELETE | /api/pedidos/:id | adm, atend, gestor | Soft delete |
+
+> ⚠️ Ao avançar para `programado`, o módulo de pedidos cria automaticamente um registro em `execucoes` com `status: 'pendente'` e sem motorista/veículo. A logística (Rodrigo) preenche isso via `/api/logistica/execucoes/:id/atribuir`.
+
+### Logística — Execuções (Rodrigo)
+| Método | Rota | Roles | Descrição |
+|--------|------|-------|-----------|
+| GET | /api/logistica/execucoes | adm, gestor, operador | Listar execuções. Filtros: `status`, `data` (YYYY-MM-DD), `semAtribuicao=true` |
+| GET | /api/logistica/execucoes/:id | adm, gestor, operador | Buscar execução por ID |
+| PUT | /api/logistica/execucoes/:id/atribuir | adm, gestor, operador | Atribuir motorista e veículo a uma execução |
+| PUT | /api/logistica/execucoes/:id/status | adm, gestor, operador | Atualizar status da execução |
+
+**Body — atribuir execução:**
+```json
+{ "motoristaId": 1, "veiculoId": 2 }
+```
+
+**Body — atualizar status:**
+```json
+{ "status": "em_rota", "observacao": "...", "evidenciaUrl": "...", "latitude": -23.5, "longitude": -46.6 }
+```
+
+**Status válidos de execução:** `pendente` → `em_rota` → `no_local` → `executando` → `concluida` / `cancelada`
+
+> ⚠️ Quando a execução vai para `concluida`, o pedido vinculado é automaticamente marcado como `concluido`.
+
+### Logística — Rotas (Rodrigo)
+| Método | Rota | Roles | Descrição |
+|--------|------|-------|-----------|
+| GET | /api/logistica/rotas | adm, gestor, operador | Listar rotas. Filtros: `data`, `motoristaId`, `status` |
+| POST | /api/logistica/rotas | adm, gestor, operador | Criar rota para o dia |
+| GET | /api/logistica/rotas/:id | adm, gestor, operador | Buscar rota com paradas |
+| PUT | /api/logistica/rotas/:id/status | adm, gestor, operador | Atualizar status da rota |
+| POST | /api/logistica/rotas/:id/paradas | adm, gestor, operador | Adicionar parada à rota |
+| DELETE | /api/logistica/rotas/:id/paradas/:paradaId | adm, gestor, operador | Remover parada da rota |
+
+**Body — criar rota:**
+```json
+{ "data": "2026-04-08", "motoristaId": 1, "veiculoId": 2, "observacao": "..." }
+```
+
+**Body — adicionar parada:**
+```json
+{ "pedidoId": 42, "ordem": 1, "endereco": "Rua X, 100", "tipo": "colocacao" }
+```
+
+**Status válidos de rota:** `planejada` → `em_andamento` → `concluida` / `cancelada`
+
+> Ao adicionar uma parada com `pedidoId`, a `execucao` desse pedido é automaticamente vinculada via `rota_parada_id`.
+
 ### Fiscal (Nathalia)
 | Método | Rota | Roles | Descrição |
 |--------|------|-------|-----------|
@@ -121,7 +187,7 @@ Base URL produção: variável de ambiente `VITE_API_URL`
 
 ### Request (frontend → backend)
 - Sempre `camelCase`
-- Datas como string ISO 8601: `"2026-03-30T00:00:00Z"`
+- Datas como string ISO 8601: `"2026-04-08"` (só data) ou `"2026-04-08T10:00:00Z"` (com hora)
 - IDs como `number`
 
 ### Response (backend → frontend)
@@ -137,37 +203,121 @@ Base URL produção: variável de ambiente `VITE_API_URL`
 - 401: não autenticado
 - 403: sem permissão para o role
 - 404: recurso não encontrado
+- 422: regra de negócio violada (motorista bloqueado, veículo em manutenção, etc.)
 - 500: erro interno (logado no servidor)
 
 ---
 
 ## 4. Tabela Execucoes — Interface Crítica Compartilhada
 
-> ⚠️ Esta tabela é escrita pelo módulo de logística (Rodrigo) e lida pelo módulo fiscal (Nathalia).
-> O schema definitivo deve ser acordado antes de qualquer implementação da Sprint 3.
+> ✅ Schema definido e implementado na Sprint 3 (08/04/2026).
 
-Campos acordados até agora:
-- `id`, `pedido_id`, `motorista_id`, `veiculo_id`
-- `status` → enum `StatusExecucao` (em andamento, concluida, cancelada)
-- `data_execucao`, `observacao`
-- `created_at`, `updated_at`
+### Schema atual (`execucoes`)
+```sql
+id            BIGSERIAL PK
+pedido_id     BIGINT FK pedidos(id)       -- criado pelo módulo de pedidos (Nathalia)
+rota_parada_id BIGINT FK rota_paradas(id) -- preenchido pela logística ao adicionar parada
+motorista_id  BIGINT FK motoristas(id)    -- preenchido via /execucoes/:id/atribuir
+veiculo_id    BIGINT FK veiculos(id)      -- preenchido via /execucoes/:id/atribuir
+tipo          TEXT                        -- herdado do pedido (colocacao, retirada, troca...)
+status        status_execucao             -- pendente|em_rota|no_local|executando|concluida|cancelada
+data_inicio   TIMESTAMPTZ                 -- setado ao entrar em em_rota ou executando
+data_fim      TIMESTAMPTZ                 -- setado ao concluir ou cancelar
+latitude      DOUBLE PRECISION            -- geolocalização do início/fim
+longitude     DOUBLE PRECISION
+observacao    TEXT
+evidencia_url TEXT                        -- foto/URL de evidência de conclusão
+created_at    TIMESTAMPTZ
+updated_at    TIMESTAMPTZ
+```
 
-Campos pendentes de definição (combinar com Nathalia):
-- Referência para nota fiscal gerada
-- Campos necessários para emissão automática de NF
+### Quem escreve o quê
+| Campo | Responsável | Quando |
+|-------|-------------|--------|
+| `pedido_id`, `tipo`, `status=pendente` | Módulo pedidos (Nathalia) | Pedido avança para `programado` |
+| `motorista_id`, `veiculo_id` | Logística (Rodrigo) via `/atribuir` | Operador faz atribuição no painel |
+| `rota_parada_id` | Logística (Rodrigo) via `/rotas/:id/paradas` | Parada adicionada à rota |
+| `status`, `data_inicio/fim`, `observacao`, `evidencia_url` | Logística (Rodrigo) via `/status` | Motorista avança o status em campo |
+| Pedido → `concluido` | Automático | Execução vai para `concluida` |
+
+### Pendente (combinar com Nathalia para Sprint 4)
+- Campo para referência da nota fiscal gerada (`nota_fiscal_id`)
+- Gatilho automático de geração de fatura ao concluir pedido
 
 ---
 
-## 5. RBAC — Roles do Sistema
+## 5. Tabelas de Rota
+
+### `rotas`
+```sql
+id           BIGSERIAL PK
+data         DATE                -- data da rota (filtro principal do painel)
+motorista_id BIGINT FK
+veiculo_id   BIGINT FK
+status       TEXT                -- planejada|em_andamento|concluida|cancelada
+observacao   TEXT
+created_by   UUID FK auth.users
+created_at   TIMESTAMPTZ
+updated_at   TIMESTAMPTZ
+```
+
+### `rota_paradas`
+```sql
+id         BIGSERIAL PK
+rota_id    BIGINT FK rotas(id) ON DELETE CASCADE
+pedido_id  BIGINT FK pedidos(id)   -- nullable (parada sem pedido vinculado)
+ordem      INT                     -- sequência na rota
+endereco   TEXT
+tipo       TEXT                    -- colocacao|retirada|troca
+status     status_execucao
+hora_chegada TIMESTAMPTZ
+hora_saida   TIMESTAMPTZ
+observacao TEXT
+created_at TIMESTAMPTZ
+```
+
+---
+
+## 6. RBAC — Roles do Sistema
 
 | Role | Descrição |
 |------|-----------|
 | `administrador` | Acesso total |
 | `gestor` | Gestão operacional completa |
 | `atendimento` | Cadastros e pedidos |
-| `operador` | Ativos e execução |
+| `operador` | Ativos, execuções e rotas |
 | `fiscal` | Notas fiscais e faturamento |
 | `financeiro` | Boletos e contas |
-| `motorista` | App mobile (futuro) |
+| `motorista` | App mobile (futuro — view only) |
 
 Definido em `shared/enums.ts` → `AppRole`.
+
+---
+
+## 7. Histórico de Sprints
+
+### Sprint 1 (27/03/2026)
+- Auth/RBAC completo (JWT, 7 roles, guard por rota)
+- Cadastros-base: clientes, obras, endereços, contatos
+- Ativos: caçambas, veículos, máquinas, motoristas
+- `shared/enums.ts` e `shared/contracts.md` criados
+
+### Sprint 2 (27–29/03/2026)
+- Serviços: CRUD completo (backend + frontend)
+- Pedidos: CRUD completo, máquina de estados (10 status), OS
+- Execução automática criada ao programar pedido
+- Frontend: PedidosPage, PedidoFormPage, PedidoDetalhePage
+
+### Sprint 3 — Logística (08/04/2026) — Rodrigo
+- Módulo `backend/src/modules/logistica/` (types + service + controller)
+- 9 endpoints em `/api/logistica/` para execuções e rotas
+- `STATUS_EXECUCAO_LABELS` adicionado em `shared/enums.ts`
+- Classes de status para execução/rota adicionadas ao `StatusBadge`
+- 8 funções de API em `src/lib/api.ts`
+- 7 hooks em `src/hooks/useQuery.ts` (queries + mutations com invalidação)
+- `RotasPage.tsx` — painel completo de programação diária (duas colunas)
+
+### Sprint 3 — Financeiro (pendente — Nathalia)
+- Backend de faturas (gerar fatura por pedido concluído)
+- Integração bancária boleto/Pix
+- Controle de inadimplência
