@@ -141,8 +141,17 @@ export interface RotaDto {
 
 export interface ListExecucoesQuery {
   status?: StatusExecucao;
-  data?: string;       // filtro por data_programada do pedido (YYYY-MM-DD)
+  data?: string;           // filtro por data_programada exata (YYYY-MM-DD) — usado pela logística
+  dataInicio?: string;     // filtro por período (YYYY-MM-DD) — usado pela OS page
+  dataFim?: string;
   semAtribuicao?: boolean;
+  page?: number;
+  limit?: number;
+}
+
+export interface ListExecucoesResult {
+  data: ExecucaoDto[];
+  total: number;
 }
 
 export interface AtribuirExecucaoDto {

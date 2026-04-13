@@ -32,17 +32,16 @@ function toUnidadeDto(row: UnidadeCacambaRow): UnidadeCacambaDto {
     observacao: row.observacao,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    cacamba: row.cacambas ?? null,
   };
 }
 
 // ─── Tipos/modelos ────────────────────────────────────────────────────────────
 
-export async function listarCacambas(): Promise<CacambaDto[]> {
-  const { data, error } = await supabaseAdmin
-    .from('cacambas')
-    .select('*')
-    .order('descricao', { ascending: true });
-
+export async function listarCacambas(query?: { ativo?: boolean }): Promise<CacambaDto[]> {
+  let q = supabaseAdmin.from('cacambas').select('*').order('descricao', { ascending: true });
+  if (query?.ativo !== undefined) q = q.eq('ativo', query.ativo);
+  const { data, error } = await q;
   if (error) throw new Error('Falha ao buscar caçambas.');
   return (data as CacambaRow[]).map(toCacambaDto);
 }
@@ -105,7 +104,7 @@ export async function atualizarCacamba(id: number, dto: UpdateCacambaDto): Promi
 export async function listarUnidades(query: ListUnidadesQuery): Promise<UnidadeCacambaDto[]> {
   let q = supabaseAdmin
     .from('unidades_cacamba')
-    .select('*')
+    .select('*, cacambas(id, descricao)')
     .order('patrimonio', { ascending: true });
 
   if (query.status)    q = q.eq('status', query.status);

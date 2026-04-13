@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '../../lib/supabase';
 import type {
-  ExecucaoRow, ExecucaoDto,
+  ExecucaoRow, ExecucaoDto, ListExecucoesResult,
   RotaRow, RotaDto, RotaParadaDto, RotaParadaRow,
   ListExecucoesQuery, AtribuirExecucaoDto, UpdateStatusExecucaoDto,
   ListRotasQuery, CreateRotaDto, CreateParadaDto,
@@ -82,7 +82,12 @@ function rotaToDto(row: RotaRow): RotaDto {
 
 // ─── Execuções ────────────────────────────────────────────────────────────────
 
-export async function listarExecucoes(query: ListExecucoesQuery): Promise<ExecucaoDto[]> {
+export async function listarExecucoes(query: ListExecucoesQuery): Promise<ExecucaoDto[] | ListExecucoesResult> {
+  const isPaginado = query.page !== undefined;
+  const limit = query.limit ?? 20;
+  const page  = query.page  ?? 1;
+  const from  = (page - 1) * limit;
+
   let q = supabaseAdmin
     .from('execucoes')
     .select(`
@@ -95,22 +100,28 @@ export async function listarExecucoes(query: ListExecucoesQuery): Promise<Execuc
       ),
       motoristas(id, nome, celular),
       veiculos(id, placa, modelo)
-    `)
-    .order('created_at', { ascending: true });
+    `, isPaginado ? { count: 'exact' } : undefined)
+    .order('created_at', { ascending: false });
 
   if (query.status)        q = q.eq('status', query.status);
   if (query.semAtribuicao) q = q.is('motorista_id', null);
+  if (query.dataInicio)    q = (q as any).gte('created_at', `${query.dataInicio}T00:00:00`);
+  if (query.dataFim)       q = (q as any).lte('created_at', `${query.dataFim}T23:59:59`);
+  if (isPaginado)          q = (q as any).range(from, from + limit - 1);
 
-  const { data, error } = await q;
+  const { data, error, count } = await q as any;
   if (error) throw new Error('Falha ao buscar execuções.');
 
-  let rows = (data as ExecucaoRow[]);
+  let rows = data as ExecucaoRow[];
 
-  // filtro por data_programada do pedido (feito em memória pois é join)
+  // filtro por data_programada exata (usado pela logística — feito em memória pois é join)
   if (query.data) {
     rows = rows.filter(r => r.pedidos?.data_programada?.startsWith(query.data!));
   }
 
+  if (isPaginado) {
+    return { data: rows.map(execucaoToDto), total: count ?? 0 };
+  }
   return rows.map(execucaoToDto);
 }
 

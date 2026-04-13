@@ -33,123 +33,88 @@ export async function logAuditoria(acao: string, entidade: string, entidadeId?: 
 
 // ===== CLIENTES =====
 export async function fetchClientes(search?: string, page = 1, limit = 20) {
-  const from = (page - 1) * limit;
-  const to = from + limit - 1;
-
-  let query = supabase
-    .from('clientes')
-    .select('*', { count: 'exact' })
-    .is('deleted_at', null)
-    .order('nome')
-    .range(from, to);
-
-  if (search) query = query.or(`nome.ilike.%${search}%,fantasia.ilike.%${search}%,cpf.ilike.%${search}%,cnpj.ilike.%${search}%`);
-
-  const { data, error, count } = await query;
-  if (error) throw error;
-  return { data: data ?? [], total: count ?? 0 };
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (search) params.set('busca', search);
+  return backendRequest<{ data: any[]; total: number }>(`/api/clientes?${params}`);
 }
 
 export async function fetchClientesLookup(search?: string) {
-  let query = supabase
-    .from('clientes')
-    .select('id, nome, fantasia, cpf, cnpj')
-    .is('deleted_at', null)
-    .limit(50);
-
-  if (search) {
-    query = query
-      .or(`nome.ilike.%${search}%,fantasia.ilike.%${search}%,cpf.ilike.%${search}%,cnpj.ilike.%${search}%`)
-      .order('nome');
-  } else {
-    query = query.order('created_at', { ascending: false });
-  }
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data ?? [];
+  const params = new URLSearchParams({ limit: '50' });
+  if (search) params.set('busca', search);
+  const result = await backendRequest<{ data: any[]; total: number }>(`/api/clientes?${params}`);
+  return result.data;
 }
 
 export async function fetchCliente(id: number) {
-  const { data, error } = await supabase.from('clientes').select('*').eq('id', id).single();
-  if (error) throw error;
-  return data;
+  return backendRequest<any>(`/api/clientes/${id}`);
 }
 
 export async function createCliente(cliente: any) {
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data, error } = await supabase.from('clientes').insert({ ...cliente, created_by: user?.id } as any).select().single();
-  if (error) throw error;
-  await logAuditoria('criacao', 'clientes', data.id, null, data);
-  return data;
+  return backendRequest<any>('/api/clientes', {
+    method: 'POST',
+    body: JSON.stringify(cliente),
+  });
 }
 
 export async function updateCliente(id: number, cliente: any) {
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: old } = await supabase.from('clientes').select('*').eq('id', id).single();
-  const { data, error } = await supabase.from('clientes').update({ ...cliente, updated_by: user?.id } as any).eq('id', id).select().single();
-  if (error) throw error;
-  await logAuditoria('edicao', 'clientes', id, old, data);
-  return data;
+  return backendRequest<any>(`/api/clientes/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(cliente),
+  });
 }
 
 // ===== CONTATOS =====
 export async function fetchContatos(clienteId: number) {
-  const { data, error } = await supabase.from('contatos_cliente').select('*').eq('cliente_id', clienteId).order('nome');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>(`/api/contatos?clienteId=${clienteId}`);
 }
 
 export async function createContato(contato: any) {
-  const { data, error } = await supabase.from('contatos_cliente').insert(contato as any).select().single();
-  if (error) throw error;
-  return data;
+  const { cliente_id, ...rest } = contato;
+  return backendRequest<any>('/api/contatos', {
+    method: 'POST',
+    body: JSON.stringify({ clienteId: cliente_id, ...rest }),
+  });
 }
 
 // ===== OBRAS =====
 export async function fetchObras(clienteId?: number) {
-  let query = supabase.from('obras').select('*').is('deleted_at', null).order('nome');
-  if (clienteId) query = query.eq('cliente_id', clienteId);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
+  const qs = clienteId ? `?clienteId=${clienteId}` : '';
+  return backendRequest<any[]>(`/api/obras${qs}`);
 }
 
 export async function createObra(obra: any) {
-  const { data, error } = await supabase.from('obras').insert(obra as any).select().single();
-  if (error) throw error;
-  return data;
+  const { cliente_id, ...rest } = obra;
+  return backendRequest<any>('/api/obras', {
+    method: 'POST',
+    body: JSON.stringify({ clienteId: cliente_id, ...rest }),
+  });
 }
 
 // ===== ENDERECOS ENTREGA =====
 export async function fetchEnderecosEntrega(clienteId: number) {
-  const { data, error } = await supabase.from('enderecos_entrega').select('*').eq('cliente_id', clienteId);
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>(`/api/enderecos?clienteId=${clienteId}`);
 }
 
 export async function createEnderecoEntrega(endereco: any) {
-  const { data, error } = await supabase.from('enderecos_entrega').insert(endereco as any).select().single();
-  if (error) throw error;
-  return data;
+  const { cliente_id, obra_id, ...rest } = endereco;
+  return backendRequest<any>('/api/enderecos', {
+    method: 'POST',
+    body: JSON.stringify({ clienteId: cliente_id, obraId: obra_id ?? null, ...rest }),
+  });
 }
 
 // ===== CACAMBAS =====
 export async function fetchCacambas() {
-  const { data, error } = await supabase.from('cacambas').select('*').eq('ativo', true).order('descricao');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/cacambas?ativo=true');
 }
 
 // ===== SERVICOS =====
 export async function fetchServicos() {
-  const { data, error } = await supabase.from('servicos').select('*').eq('ativo', true).order('descricao');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/servicos');
 }
 
 export async function fetchServicosAll() {
-  return backendRequest<any[]>('/api/servicos');
+  return fetchServicos();
 }
 
 export async function createServico(dto: { descricao: string; codigoFiscal?: string; aliquota?: number }) {
@@ -166,73 +131,34 @@ export async function toggleServico(id: number) {
 
 // ===== MOTORISTAS =====
 export async function fetchMotoristas() {
-  const { data, error } = await supabase.from('motoristas').select('*').eq('status', 'ativo').order('nome');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/motoristas?status=ativo');
 }
 
 export async function fetchMotoristasAll() {
-  const { data, error } = await supabase.from('motoristas').select('*').order('nome');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/motoristas');
 }
 
 // ===== VEICULOS =====
 export async function fetchVeiculos() {
-  const { data, error } = await supabase.from('veiculos').select('*').in('status', ['disponivel', 'em_operacao']).order('placa');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/veiculos?status=disponivel,em_operacao');
 }
 
 export async function fetchVeiculosAll() {
-  const { data, error } = await supabase.from('veiculos').select('*').order('placa');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/veiculos');
 }
 
 // ===== PEDIDOS =====
-export async function fetchPedidos(filters?: { status?: string; clienteId?: number; search?: string }) {
-  let query = supabase.from('pedidos').select('*, clientes!inner(nome, fantasia)').is('deleted_at', null).order('created_at', { ascending: false });
-  if (filters?.status)    query = query.eq('status', filters.status as any);
-  if (filters?.clienteId) query = query.eq('cliente_id', filters.clienteId);
-  if (filters?.search)    query = query.or(`numero.ilike.%${filters.search}%`);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
+export async function fetchPedidos(filters?: { status?: string; clienteId?: number; search?: string; page?: number }) {
+  const params = new URLSearchParams({ limit: '20' });
+  if (filters?.status)    params.set('status', filters.status);
+  if (filters?.clienteId) params.set('clienteId', String(filters.clienteId));
+  if (filters?.search)    params.set('busca', filters.search);
+  if (filters?.page)      params.set('page', String(filters.page));
+  return backendRequest<{ data: any[]; total: number }>(`/api/pedidos?${params}`);
 }
 
 export async function fetchPedido(id: number) {
-  const { data, error } = await supabase
-    .from('pedidos')
-    .select(`
-      *,
-      clientes(nome, fantasia, cpf, cnpj, inscricao_municipal, inscricao_estadual,
-               endereco, numero, complemento, bairro, cidade, estado, cep, email, telefone),
-      enderecos_entrega(endereco, numero, bairro, cidade, estado, cep, contato, referencia),
-      cacambas(descricao, capacidade),
-      servicos(descricao, codigo_fiscal, aliquota),
-      motoristas_colocacao:motoristas!motorista_colocacao_id(id, nome),
-      veiculos_colocacao:veiculos!veiculo_colocacao_id(id, placa, modelo)
-    `)
-    .eq('id', id)
-    .single();
-  if (error) throw error;
-  const [faturaVinc, boletosVinc] = await Promise.all([
-    supabase
-      .from('fatura_pedidos')
-      .select('fatura_id, valor, faturas(id, numero, status, valor_total, data_vencimento)')
-      .eq('pedido_id', id),
-    (supabase as any)
-      .from('boletos')
-      .select('id, status, valor, data_vencimento, linha_digitavel, fatura_id, nosso_numero')
-      .eq('pedido_id', id)
-      .order('created_at', { ascending: false }),
-  ]);
-  return {
-    ...data,
-    faturas_vinculadas: faturaVinc.data || [],
-    boletos_vinculados: boletosVinc.data || [],
-  };
+  return backendRequest<any>(`/api/pedidos/${id}`);
 }
 
 export async function createPedido(pedido: any) {
@@ -250,13 +176,7 @@ export async function updatePedidoStatus(id: number, statusNovo: string, observa
 }
 
 export async function fetchPedidoHistorico(pedidoId: number) {
-  const { data, error } = await supabase
-    .from('pedido_historico')
-    .select('*, profiles:usuario_id(nome)')
-    .eq('pedido_id', pedidoId)
-    .order('created_at');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>(`/api/pedidos/${pedidoId}/historico`);
 }
 
 // ===== FATURAS =====
@@ -436,12 +356,7 @@ export async function fetchMateriais() {
 
 // ===== UNIDADES CACAMBA =====
 export async function fetchUnidadesCacamba() {
-  const { data, error } = await supabase
-    .from('unidades_cacamba')
-    .select('*, cacambas(descricao)')
-    .order('patrimonio');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/cacambas/unidades');
 }
 
 // ===== CONTAS A PAGAR =====
@@ -582,12 +497,16 @@ export async function fetchRelatorioInadimplencia(filtros: FiltrosRelatorio) {
 
 // ─── Logística ────────────────────────────────────────────────────────────────
 
-export async function fetchExecucoes(params?: { status?: string; data?: string; semAtribuicao?: boolean }) {
+export async function fetchExecucoes(params?: { status?: string; data?: string; semAtribuicao?: boolean; dataInicio?: string; dataFim?: string; page?: number }) {
   const qs = new URLSearchParams();
   if (params?.status)        qs.set('status', params.status);
   if (params?.data)          qs.set('data', params.data);
   if (params?.semAtribuicao) qs.set('semAtribuicao', 'true');
-  return backendRequest<any[]>(`/api/logistica/execucoes?${qs}`);
+  if (params?.dataInicio)    qs.set('dataInicio', params.dataInicio);
+  if (params?.dataFim)       qs.set('dataFim', params.dataFim);
+  if (params?.page)          qs.set('page', String(params.page));
+  if (params?.page)          qs.set('limit', '20');
+  return backendRequest<any[] | { data: any[]; total: number }>(`/api/logistica/execucoes?${qs}`);
 }
 
 export async function atribuirExecucao(id: number, motoristaId: number, veiculoId: number) {

@@ -28,7 +28,13 @@ export async function listar(query: ListVeiculosQuery): Promise<VeiculoDto[]> {
     .select('*')
     .order('modelo', { ascending: true });
 
-  if (query.status) q = q.eq('status', query.status);
+  if (query.status) {
+    if (Array.isArray(query.status)) {
+      q = q.in('status', query.status);
+    } else {
+      q = q.eq('status', query.status);
+    }
+  }
 
   const { data, error } = await q;
   if (error) throw new Error('Falha ao buscar veículos.');

@@ -81,10 +81,10 @@ export default function PedidoDetalhePage() {
         status: 'programado',
         obs: `Motorista: ${motoristaNome} — Veículo: ${veiculoLabel}${formObs ? ` — ${formObs}` : ''}`,
         extra: {
-          motorista_colocacao_id: Number(formMotoristaId),
-          veiculo_colocacao_id: Number(formVeiculoId),
-          data_programada: formData,
-          hora_programada: formHora || null,
+          motoristaColocacaoId: Number(formMotoristaId),
+          veiculoColocacaoId: Number(formVeiculoId),
+          dataProgramada: formData,
+          horaProgramada: formHora || null,
         },
       });
       toast.success('Pedido programado!');
@@ -99,7 +99,7 @@ export default function PedidoDetalhePage() {
         id: pedidoId!,
         status: 'em_execucao',
         obs: `Colocação confirmada${formObs ? ` — ${formObs}` : ''}`,
-        extra: { data_colocacao: `${formData}T${formHora}:00`, obs_colocacao: formObs || null },
+        extra: { dataColocacao: `${formData}T${formHora}:00`, obsColocacao: formObs || null },
       });
       toast.success('Colocação confirmada!');
       setModal(null); resetForm();
@@ -113,7 +113,7 @@ export default function PedidoDetalhePage() {
         id: pedidoId!,
         status: 'concluido',
         obs: `Retirada confirmada${formAterro ? ` — Aterro: ${formAterro}` : ''}${formObs ? ` — ${formObs}` : ''}`,
-        extra: { data_retirada: `${formData}T${formHora}:00`, aterro_destino: formAterro || null },
+        extra: { dataRetirada: `${formData}T${formHora}:00`, aterroDestino: formAterro || null },
       });
       toast.success('Retirada confirmada! Pedido concluído.');
       setModal(null); resetForm();
@@ -128,11 +128,11 @@ export default function PedidoDetalhePage() {
     try {
       const fatura = await createFatura.mutateAsync({
         fatura: {
-          cliente_id: (pedido as any).cliente_id,
+          cliente_id: p.clienteId,
           data_emissao: new Date().toISOString().split('T')[0],
           data_vencimento: formVencimento,
-          valor_bruto: Number((pedido as any).valor_total),
-          valor_liquido: Number((pedido as any).valor_total),
+          valor_bruto: Number(p.valorTotal),
+          valor_liquido: Number(p.valorTotal),
           forma_cobranca: formTipoPgto,
           observacao: formObs || null,
         },
@@ -166,10 +166,10 @@ export default function PedidoDetalhePage() {
   }
 
   const p = pedido as any;
-  const clienteNome = p.clientes?.nome || '—';
-  const enderecoFormatado = formatEndereco(p.enderecos_entrega);
-  const cacambaDesc = p.cacambas?.descricao || '—';
-  const servicoDesc = p.servicos?.descricao || '—';
+  const clienteNome = p.clienteNome || '—';
+  const enderecoFormatado = formatEndereco(p.enderecoEntrega);
+  const cacambaDesc = p.cacambaDescricao || '—';
+  const servicoDesc = p.servicoDescricao || '—';
 
   const statusActions: Record<string, { label: string; action: ModalType; icon: React.ElementType }[]> = {
     orcamento:    [{ label: 'Programar', action: 'programar', icon: Calendar }],
@@ -250,7 +250,7 @@ export default function PedidoDetalhePage() {
               <div>
                 <span className="text-muted-foreground block text-xs mb-0.5">Cliente</span>
                 <span className="font-medium">
-                  <button className="hover:underline text-left" onClick={() => navigate(`/clientes/${p.cliente_id}`)}>
+                  <button className="hover:underline text-left" onClick={() => navigate(`/clientes/${p.clienteId}`)}>
                     {clienteNome}
                   </button>
                 </span>
@@ -261,7 +261,7 @@ export default function PedidoDetalhePage() {
               </div>
               <div>
                 <span className="text-muted-foreground block text-xs mb-0.5">Tipo Locação</span>
-                <span className="font-medium">{tiposLocacaoLabel[p.tipo_locacao] || p.tipo_locacao}</span>
+                <span className="font-medium">{tiposLocacaoLabel[p.tipoLocacao] || p.tipoLocacao}</span>
               </div>
               <div>
                 <span className="text-muted-foreground block text-xs mb-0.5">Quantidade</span>
@@ -270,16 +270,16 @@ export default function PedidoDetalhePage() {
               <div>
                 <span className="text-muted-foreground block text-xs mb-0.5">Valor Total</span>
                 <span className="font-bold text-primary">
-                  R$ {Number(p.valor_total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  R$ {Number(p.valorTotal).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div>
                 <span className="text-muted-foreground block text-xs mb-0.5">Data Pedido</span>
-                <span className="font-medium">{formatData(p.data_pedido)}</span>
+                <span className="font-medium">{formatData(p.dataPedido)}</span>
               </div>
               <div>
                 <span className="text-muted-foreground block text-xs mb-0.5">Retirada Prevista</span>
-                <span className="font-medium">{formatData(p.data_retirada_prevista)}</span>
+                <span className="font-medium">{formatData(p.dataRetiradaPrevista)}</span>
               </div>
               <div>
                 <span className="text-muted-foreground block text-xs mb-0.5">Serviço</span>
@@ -297,11 +297,11 @@ export default function PedidoDetalhePage() {
           <div className="bg-card rounded-lg border p-5">
             <h3 className="text-sm font-semibold mb-3">Endereço de Entrega</h3>
             <p className="text-sm">{enderecoFormatado}</p>
-            {p.enderecos_entrega?.contato && (
-              <p className="text-xs text-muted-foreground mt-1">Contato: {p.enderecos_entrega.contato}</p>
+            {p.enderecoEntrega?.contato && (
+              <p className="text-xs text-muted-foreground mt-1">Contato: {p.enderecoEntrega.contato}</p>
             )}
-            {p.enderecos_entrega?.referencia && (
-              <p className="text-xs text-muted-foreground">Referência: {p.enderecos_entrega.referencia}</p>
+            {p.enderecoEntrega?.referencia && (
+              <p className="text-xs text-muted-foreground">Referência: {p.enderecoEntrega.referencia}</p>
             )}
           </div>
 
@@ -339,10 +339,10 @@ export default function PedidoDetalhePage() {
                 <FileText className="w-4 h-4 text-muted-foreground" />
                 Informações Fiscais
               </h3>
-              <StatusFiscalBadge status={p.status_fiscal} />
+              <StatusFiscalBadge status={p.statusFiscal} />
             </div>
 
-            {p.status_fiscal === 'emitida' && p.nota_fiscal_id ? (
+            {p.statusFiscal === 'emitida' && p.notaFiscalId ? (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
                   NF-e vinculada ao pedido. Acesse o módulo Fiscal para detalhes.
@@ -353,7 +353,7 @@ export default function PedidoDetalhePage() {
                   </Button>
                 </div>
               </div>
-            ) : p.status_fiscal === 'erro' ? (
+            ) : p.statusFiscal === 'erro' ? (
               <div className="space-y-3">
                 <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
                   <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -386,14 +386,14 @@ export default function PedidoDetalhePage() {
                 <DollarSign className="w-4 h-4 text-muted-foreground" />
                 Financeiro e Cobrança
               </h3>
-              <span className="text-xs text-muted-foreground">{p.financeiro_status || 'aberto'}</span>
+              <span className="text-xs text-muted-foreground">aberto</span>
             </div>
 
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Fatura vinculada</span>
                 <span className="font-mono text-xs">
-                  {p.faturas_vinculadas?.[0]?.faturas?.numero || (p.fatura_id ? `#${p.fatura_id}` : '—')}
+                  {p.faturas_vinculadas?.[0]?.faturas?.numero || '—'}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -419,7 +419,7 @@ export default function PedidoDetalhePage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setDrawerBoletoOpen(true)}
-                  disabled={!(p.fatura_id || p.status === 'faturado' || p.status === 'concluido')}
+                  disabled={!(p.status === 'faturado' || p.status === 'concluido')}
                 >
                   <DollarSign className="w-4 h-4 mr-1" /> Emitir Boleto
                 </Button>
@@ -608,7 +608,7 @@ export default function PedidoDetalhePage() {
                   <div className="flex justify-between border-t pt-2 mt-2">
                     <span className="font-semibold">Valor</span>
                     <span className="font-bold text-primary">
-                      R$ {Number(p.valor_total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      R$ {Number(p.valorTotal).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                 </div>
@@ -653,10 +653,10 @@ export default function PedidoDetalhePage() {
           id: p.id,
           numero: p.numero,
           cliente: clienteNome,
-          clienteId: p.cliente_id,
-          valor: Number(p.valor_total),
+          clienteId: p.clienteId,
+          valor: Number(p.valorTotal),
           status: p.status,
-          statusFiscal: p.status_fiscal,
+          statusFiscal: p.statusFiscal,
         }]}
         onEmitido={() => {
           // Pedido é atualizado via react-query invalidation no hook
@@ -667,11 +667,11 @@ export default function PedidoDetalhePage() {
         open={drawerBoletoOpen}
         onOpenChange={setDrawerBoletoOpen}
         pedidoId={p.id}
-        faturaId={p.fatura_id || p.faturas_vinculadas?.[0]?.faturas?.id}
+        faturaId={p.faturas_vinculadas?.[0]?.faturas?.id}
         prefill={{
-          clienteId: p.cliente_id,
+          clienteId: p.clienteId,
           clienteNome,
-          valor: Number(p.valor_total || 0),
+          valor: Number(p.valorTotal || 0),
           descricao: `Referente ao pedido ${p.numero}`,
         }}
       />

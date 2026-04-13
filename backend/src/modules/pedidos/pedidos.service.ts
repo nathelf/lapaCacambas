@@ -37,7 +37,7 @@ function toDto(row: PedidoRow): PedidoDto {
     servicoId: row.servico_id,
     servicoDescricao: row.servicos?.descricao ?? null,
     cacambaId: row.cacamba_id,
-    cacambaNumero: row.cacambas?.numero ?? null,
+    cacambaDescricao: row.cacambas?.descricao ?? null,
     unidadeCacambaId: row.unidade_cacamba_id,
     maquinaId: row.maquina_id,
     tipo: row.tipo,
@@ -69,6 +69,7 @@ function toDto(row: PedidoRow): PedidoDto {
     dataFaturamento: row.data_faturamento,
     statusFiscal: row.status_fiscal,
     notaFiscalId: row.nota_fiscal_id,
+    enderecoEntrega: row.enderecos_entrega ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -82,7 +83,7 @@ export async function listar(query: ListPedidosQuery): Promise<{ data: PedidoDto
 
   let q = supabaseAdmin
     .from('pedidos')
-    .select('*, clientes(nome, fantasia, status), obras(nome), servicos(descricao, codigo_fiscal, aliquota), cacambas(numero)', { count: 'exact' })
+    .select('*, clientes(nome, fantasia, status), obras(nome), servicos(descricao, codigo_fiscal, aliquota), cacambas(descricao)', { count: 'exact' })
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
@@ -105,7 +106,7 @@ export async function listar(query: ListPedidosQuery): Promise<{ data: PedidoDto
 export async function buscarPorId(id: number): Promise<PedidoDto> {
   const { data, error } = await supabaseAdmin
     .from('pedidos')
-    .select('*, clientes(nome, fantasia, status), obras(nome), servicos(descricao, codigo_fiscal, aliquota), cacambas(numero)')
+    .select('*, clientes(nome, fantasia, status), obras(nome), servicos(descricao, codigo_fiscal, aliquota), cacambas(descricao), enderecos_entrega(endereco, numero, bairro, cidade, estado, contato, referencia)')
     .eq('id', id)
     .is('deleted_at', null)
     .single();
@@ -170,7 +171,7 @@ export async function criar(dto: CreatePedidoDto, userId: string): Promise<Pedid
       created_by: userId,
       updated_by: userId,
     })
-    .select('*, clientes(nome, fantasia, status), obras(nome), servicos(descricao, codigo_fiscal, aliquota), cacambas(numero)')
+    .select('*, clientes(nome, fantasia, status), obras(nome), servicos(descricao, codigo_fiscal, aliquota), cacambas(descricao)')
     .single();
 
   if (error || !data) throw new Error('Falha ao criar pedido.');
@@ -218,7 +219,7 @@ export async function atualizar(id: number, dto: UpdatePedidoDto, userId: string
     .update(updates)
     .eq('id', id)
     .is('deleted_at', null)
-    .select('*, clientes(nome, fantasia, status), obras(nome), servicos(descricao, codigo_fiscal, aliquota), cacambas(numero)')
+    .select('*, clientes(nome, fantasia, status), obras(nome), servicos(descricao, codigo_fiscal, aliquota), cacambas(descricao)')
     .single();
 
   if (error || !data) throw new Error('Pedido não encontrado.');
@@ -251,6 +252,23 @@ export async function mudarStatus(id: number, dto: UpdateStatusPedidoDto, userId
     updated_at: new Date().toISOString(),
   };
 
+  // Campos extras por transição
+  if (novoStatus === 'programado') {
+    if (dto.motoristaColocacaoId !== undefined) updates.motorista_colocacao_id = dto.motoristaColocacaoId;
+    if (dto.veiculoColocacaoId !== undefined)   updates.veiculo_colocacao_id   = dto.veiculoColocacaoId;
+    if (dto.dataProgramada !== undefined)        updates.data_programada        = dto.dataProgramada;
+    if (dto.horaProgramada !== undefined)        updates.hora_programada        = dto.horaProgramada;
+  }
+  if (novoStatus === 'em_execucao') {
+    if (dto.dataColocacao !== undefined) updates.data_colocacao = dto.dataColocacao;
+    if (dto.obsColocacao !== undefined)  updates.obs_colocacao  = dto.obsColocacao;
+  }
+  if (novoStatus === 'concluido') {
+    if (dto.dataRetirada !== undefined)  updates.data_retirada  = dto.dataRetirada;
+    if (dto.obsRetirada !== undefined)   updates.obs_retirada   = dto.obsRetirada;
+    if (dto.aterroDestino !== undefined) updates.aterro_destino = dto.aterroDestino;
+  }
+
   // Quando pedido é faturado, registra a data
   if (novoStatus === 'faturado') {
     updates.faturado = true;
@@ -261,7 +279,7 @@ export async function mudarStatus(id: number, dto: UpdateStatusPedidoDto, userId
     .from('pedidos')
     .update(updates)
     .eq('id', id)
-    .select('*, clientes(nome, fantasia, status), obras(nome), servicos(descricao, codigo_fiscal, aliquota), cacambas(numero)')
+    .select('*, clientes(nome, fantasia, status), obras(nome), servicos(descricao, codigo_fiscal, aliquota), cacambas(descricao)')
     .single();
 
   if (error || !data) throw new Error('Falha ao atualizar status.');
@@ -304,4 +322,15 @@ export async function deletar(id: number, userId: string): Promise<void> {
     .eq('id', id);
 
   if (error) throw new Error('Falha ao remover pedido.');
+}
+
+export async function buscarHistorico(pedidoId: number): Promise<any[]> {
+  const { data, error } = await supabaseAdmin
+    .from('pedido_historico')
+    .select('*, profiles:usuario_id(nome)')
+    .eq('pedido_id', pedidoId)
+    .order('created_at', { ascending: true });
+
+  if (error) throw new Error('Falha ao buscar histórico do pedido.');
+  return data ?? [];
 }

@@ -24,6 +24,18 @@ pedidosRouter.get('/', async (req: Request, res: Response, next: NextFunction) =
   }
 });
 
+// GET /api/pedidos/:id/historico
+pedidosRouter.get('/:id/historico', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) { res.status(400).json({ message: 'ID inválido.' }); return; }
+    const data = await pedidosService.buscarHistorico(id);
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/pedidos/:id
 pedidosRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {

@@ -73,8 +73,17 @@ export type PedidoRow = {
   // joins opcionais (quando o select traz dados relacionados)
   clientes?: { nome: string; fantasia: string | null; status: string } | null;
   servicos?: { descricao: string; codigo_fiscal: string | null; aliquota: number } | null;
-  cacambas?: { numero: string } | null;
+  cacambas?: { descricao: string } | null;
   obras?: { nome: string } | null;
+  enderecos_entrega?: {
+    endereco: string | null;
+    numero: string | null;
+    bairro: string | null;
+    cidade: string | null;
+    estado: string | null;
+    contato: string | null;
+    referencia: string | null;
+  } | null;
 };
 
 // ─── Dto (o que o frontend recebe — camelCase) ────────────────────────────────
@@ -90,7 +99,7 @@ export type PedidoDto = {
   servicoId: number | null;
   servicoDescricao: string | null;
   cacambaId: number | null;
-  cacambaNumero: string | null;
+  cacambaDescricao: string | null;
   unidadeCacambaId: number | null;
   maquinaId: number | null;
   tipo: TipoPedido;
@@ -122,6 +131,15 @@ export type PedidoDto = {
   dataFaturamento: string | null;
   statusFiscal: StatusNotaFiscal;
   notaFiscalId: number | null;
+  enderecoEntrega?: {
+    endereco: string | null;
+    numero: string | null;
+    bairro: string | null;
+    cidade: string | null;
+    estado: string | null;
+    contato: string | null;
+    referencia: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -154,6 +172,16 @@ export type UpdatePedidoDto = Partial<Omit<CreatePedidoDto, 'clienteId'>>;
 export type UpdateStatusPedidoDto = {
   status: StatusPedido;
   motivo?: string;
+  // Campos extras por transição de status
+  motoristaColocacaoId?: number;
+  veiculoColocacaoId?: number;
+  dataProgramada?: string;
+  horaProgramada?: string | null;
+  dataColocacao?: string;
+  obsColocacao?: string | null;
+  dataRetirada?: string;
+  obsRetirada?: string | null;
+  aterroDestino?: string | null;
 };
 
 export type ListPedidosQuery = {

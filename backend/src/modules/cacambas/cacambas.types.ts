@@ -56,6 +56,7 @@ export type UnidadeCacambaRow = {
   observacao: string | null;
   created_at: string;
   updated_at: string;
+  cacambas?: { id: number; descricao: string } | null;
 };
 
 export type UnidadeCacambaDto = {
@@ -68,6 +69,7 @@ export type UnidadeCacambaDto = {
   observacao: string | null;
   createdAt: string;
   updatedAt: string;
+  cacamba?: { id: number; descricao: string } | null;
 };
 
 export type CreateUnidadeDto = {

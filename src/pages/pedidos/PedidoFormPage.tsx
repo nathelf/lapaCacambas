@@ -13,10 +13,10 @@ import { toast } from 'sonner';
 import { useClientesLookup, useEnderecosEntrega, useCacambas, useCreatePedido } from '@/hooks/useQuery';
 
 const tiposLocacao = [
-  { value: 'dia',      label: 'Diária',    priceKey: 'preco_dia' },
-  { value: 'semana',   label: 'Semanal',   priceKey: 'preco_semana' },
-  { value: 'quinzena', label: 'Quinzenal', priceKey: 'preco_quinzena' },
-  { value: 'mes',      label: 'Mensal',    priceKey: 'preco_mes' },
+  { value: 'dia',      label: 'Diária',    priceKey: 'precoDia' },
+  { value: 'semana',   label: 'Semanal',   priceKey: 'precoSemana' },
+  { value: 'quinzena', label: 'Quinzenal', priceKey: 'precoQuinzena' },
+  { value: 'mes',      label: 'Mensal',    priceKey: 'precoMes' },
 ] as const;
 
 export default function PedidoFormPage() {

@@ -5,13 +5,17 @@ export const logisticaRouter = Router();
 
 // ─── Execuções ────────────────────────────────────────────────────────────────
 
-// GET /api/logistica/execucoes?status=pendente&data=2026-04-08&semAtribuicao=true
+// GET /api/logistica/execucoes?status=pendente&data=2026-04-08&semAtribuicao=true&dataInicio=2026-04-01&dataFim=2026-04-30&page=1
 logisticaRouter.get('/execucoes', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = await svc.listarExecucoes({
       status: req.query.status as any,
       data: req.query.data as string | undefined,
       semAtribuicao: req.query.semAtribuicao === 'true',
+      dataInicio: req.query.dataInicio as string | undefined,
+      dataFim: req.query.dataFim as string | undefined,
+      page: req.query.page ? Number(req.query.page) : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
     });
     res.json(data);
   } catch (err) {

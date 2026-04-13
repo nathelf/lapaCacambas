@@ -6,7 +6,9 @@ export const veiculosRouter = Router();
 // GET /api/veiculos?status=disponivel
 veiculosRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await veiculosService.listar({ status: req.query.status as any });
+    const statusParam = req.query.status as string | undefined;
+    const status = statusParam?.includes(',') ? (statusParam.split(',') as any) : (statusParam as any);
+    const data = await veiculosService.listar({ status });
     res.json(data);
   } catch (err) {
     next(err);

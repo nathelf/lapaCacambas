@@ -58,5 +58,5 @@ export type UpdateVeiculoDto = Partial<CreateVeiculoDto> & {
 };
 
 export type ListVeiculosQuery = {
-  status?: StatusVeiculo;
+  status?: StatusVeiculo | StatusVeiculo[]; // aceita um ou múltiplos status
 };

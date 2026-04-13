@@ -40,7 +40,7 @@ export function useUpdateCliente() {
 }
 
 // ===== PEDIDOS =====
-export function usePedidos(filters?: { status?: string; clienteId?: number; search?: string }) {
+export function usePedidos(filters?: { status?: string; clienteId?: number; search?: string; page?: number }) {
   return useQuery({ queryKey: ['pedidos', filters], queryFn: () => api.fetchPedidos(filters) });
 }
 
@@ -292,8 +292,15 @@ export function useRelatorioInadimplencia(filtros: api.FiltrosRelatorio, enabled
 export function useExecucoes(params?: { status?: string; data?: string; semAtribuicao?: boolean }) {
   return useQuery({
     queryKey: ['execucoes', params],
-    queryFn: () => api.fetchExecucoes(params),
+    queryFn: () => api.fetchExecucoes(params) as Promise<any[]>,
     refetchInterval: 30_000, // atualiza a cada 30s para refletir movimentação em campo
+  });
+}
+
+export function useOrdensServico(params?: { status?: string; dataInicio?: string; dataFim?: string; page?: number }) {
+  return useQuery({
+    queryKey: ['ordens-servico', params],
+    queryFn: () => api.fetchExecucoes(params) as Promise<{ data: any[]; total: number }>,
   });
 }
 
