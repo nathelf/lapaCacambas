@@ -405,94 +405,36 @@ export interface FiltrosRelatorio {
 }
 
 export async function fetchRelatorioOperacional(filtros: FiltrosRelatorio) {
-  let query = supabase
-    .from('pedidos')
-    .select(`
-      id, numero, status, tipo, tipo_locacao, quantidade, valor_total,
-      data_pedido, data_retirada_prevista, observacao,
-      clientes(nome, fantasia),
-      enderecos_entrega(endereco, numero, bairro, cidade, estado),
-      cacambas(descricao),
-      servicos(descricao),
-      motoristas_colocacao:motoristas!motorista_colocacao_id(nome),
-      veiculos_colocacao:veiculos!veiculo_colocacao_id(placa, modelo)
-    `)
-    .is('deleted_at', null)
-    .order('data_pedido', { ascending: false });
-
-  if (filtros.dataInicio) query = query.gte('data_pedido', filtros.dataInicio);
-  if (filtros.dataFim)    query = query.lte('data_pedido', filtros.dataFim);
-  if (filtros.clienteId)  query = query.eq('cliente_id', filtros.clienteId);
-  if (filtros.status)     query = query.eq('status', filtros.status as any);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  const params = new URLSearchParams();
+  if (filtros.dataInicio) params.set('dataInicio', filtros.dataInicio);
+  if (filtros.dataFim)    params.set('dataFim', filtros.dataFim);
+  if (filtros.clienteId)  params.set('clienteId', String(filtros.clienteId));
+  if (filtros.status)     params.set('status', filtros.status);
+  return backendRequest<any[]>(`/api/relatorios/operacional?${params}`);
 }
 
 export async function fetchRelatorioFinanceiro(filtros: FiltrosRelatorio) {
-  let query = supabase
-    .from('faturas')
-    .select(`
-      id, numero, status, forma_cobranca,
-      data_emissao, data_vencimento, data_baixa,
-      valor_bruto, valor_desconto, valor_juros, valor_multa, valor_liquido, valor_baixa,
-      observacao,
-      clientes(nome, fantasia)
-    `)
-    .order('data_emissao', { ascending: false });
-
-  if (filtros.dataInicio) query = query.gte('data_emissao', filtros.dataInicio);
-  if (filtros.dataFim)    query = query.lte('data_emissao', filtros.dataFim);
-  if (filtros.clienteId)  query = query.eq('cliente_id', filtros.clienteId);
-  if (filtros.status)     query = query.eq('status', filtros.status as any);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  const params = new URLSearchParams();
+  if (filtros.dataInicio) params.set('dataInicio', filtros.dataInicio);
+  if (filtros.dataFim)    params.set('dataFim', filtros.dataFim);
+  if (filtros.clienteId)  params.set('clienteId', String(filtros.clienteId));
+  if (filtros.status)     params.set('status', filtros.status);
+  return backendRequest<any[]>(`/api/relatorios/financeiro?${params}`);
 }
 
 export async function fetchRelatorioBoletosEmitidos(filtros: FiltrosRelatorio) {
-  let query = supabase
-    .from('boletos')
-    .select(`
-      id, nosso_numero, numero_documento, banco,
-      data_emissao, data_vencimento, data_pagamento,
-      valor, valor_multa, valor_juros, valor_pago,
-      status, linha_digitavel, observacao,
-      clientes(nome),
-      faturas(numero),
-      pedidos(numero)
-    `)
-    .order('data_emissao', { ascending: false });
-
-  if (filtros.dataInicio) query = query.gte('data_emissao', filtros.dataInicio);
-  if (filtros.dataFim)    query = query.lte('data_emissao', filtros.dataFim);
-  if (filtros.clienteId)  query = query.eq('cliente_id', filtros.clienteId);
-  if (filtros.status)     query = query.eq('status', filtros.status as any);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  const params = new URLSearchParams();
+  if (filtros.dataInicio) params.set('dataInicio', filtros.dataInicio);
+  if (filtros.dataFim)    params.set('dataFim', filtros.dataFim);
+  if (filtros.clienteId)  params.set('clienteId', String(filtros.clienteId));
+  if (filtros.status)     params.set('status', filtros.status);
+  return backendRequest<any[]>(`/api/relatorios/boletos?${params}`);
 }
 
 export async function fetchRelatorioInadimplencia(filtros: FiltrosRelatorio) {
-  const hoje = new Date().toISOString().split('T')[0];
-  let query = supabase
-    .from('faturas')
-    .select(`
-      id, numero, status, data_vencimento, valor_liquido,
-      clientes(id, nome, fantasia, telefone, celular, email)
-    `)
-    .in('status', ['aberta', 'vencida', 'protesto'])
-    .lte('data_vencimento', hoje)
-    .order('data_vencimento');
-
-  if (filtros.clienteId) query = query.eq('cliente_id', filtros.clienteId);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  const params = new URLSearchParams();
+  if (filtros.clienteId) params.set('clienteId', String(filtros.clienteId));
+  return backendRequest<any[]>(`/api/relatorios/inadimplencia?${params}`);
 }
 
 // ─── Logística ────────────────────────────────────────────────────────────────
