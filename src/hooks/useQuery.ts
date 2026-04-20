@@ -161,6 +161,50 @@ export function useMotoristasAll() {
   return useQuery({ queryKey: ['motoristas-all'], queryFn: api.fetchMotoristasAll });
 }
 
+// ===== USUÁRIOS =====
+export function useUsuarios(busca?: string) {
+  return useQuery({ queryKey: ['usuarios', busca], queryFn: () => api.fetchUsuarios(busca) });
+}
+
+export function useUsuario(id: string | undefined) {
+  return useQuery({ queryKey: ['usuario', id], queryFn: () => api.fetchUsuario(id!), enabled: !!id });
+}
+
+export function useCreateUsuario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.createUsuario,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['usuarios'] }),
+  });
+}
+
+export function useUpdateUsuario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.updateUsuario(id, data),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ['usuarios'] });
+      qc.invalidateQueries({ queryKey: ['usuario', vars.id] });
+    },
+  });
+}
+
+export function usePatchUsuarioStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ativo }: { id: string; ativo: boolean }) => api.patchUsuarioStatus(id, ativo),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['usuarios'] }),
+  });
+}
+
+export function useDeleteUsuario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.deleteUsuario,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['usuarios'] }),
+  });
+}
+
 export function useVeiculos() {
   return useQuery({ queryKey: ['veiculos'], queryFn: api.fetchVeiculos });
 }

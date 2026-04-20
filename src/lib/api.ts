@@ -559,3 +559,31 @@ export async function adicionarParadaRota(rotaId: number, dto: { pedidoId?: numb
 export async function removerParadaRota(rotaId: number, paradaId: number) {
   return backendRequest<void>(`/api/logistica/rotas/${rotaId}/paradas/${paradaId}`, { method: 'DELETE' });
 }
+
+// ===== USUÁRIOS =====
+export async function fetchUsuarios(busca?: string) {
+  const params = new URLSearchParams();
+  if (busca) params.set('busca', busca);
+  const qs = params.toString();
+  return backendRequest<any[]>(`/api/usuarios${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchUsuario(id: string) {
+  return backendRequest<any>(`/api/usuarios/${id}`);
+}
+
+export async function createUsuario(dto: { email: string; password: string; nome?: string; role: string }) {
+  return backendRequest<any>('/api/usuarios', { method: 'POST', body: JSON.stringify(dto) });
+}
+
+export async function updateUsuario(id: string, dto: { email?: string; nome?: string; password?: string; roles?: string[] }) {
+  return backendRequest<any>(`/api/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(dto) });
+}
+
+export async function patchUsuarioStatus(id: string, ativo: boolean) {
+  return backendRequest<any>(`/api/usuarios/${id}/status`, { method: 'PATCH', body: JSON.stringify({ ativo }) });
+}
+
+export async function deleteUsuario(id: string) {
+  return backendRequest<void>(`/api/usuarios/${id}`, { method: 'DELETE' });
+}
