@@ -1,13 +1,19 @@
 import { supabase } from '@/integrations/supabase/client';
-import { normalizeCliente } from '@/lib/formatters';
+import { normalizeCliente, fixEncoding } from '@/lib/formatters';
 
-/** Normaliza o sub-objeto `clientes` embutido em pedidos, faturas, boletos etc. */
+/** Normaliza o sub-objeto `clientes` e campos planos de nome embutidos em pedidos, faturas, boletos etc. */
 function normalizeNested(record: any): any {
   if (!record || typeof record !== 'object') return record;
   if (record.clientes && typeof record.clientes === 'object') {
     record = { ...record, clientes: normalizeCliente(record.clientes) };
   }
-  return record;
+  // campos planos que o backend retorna diretamente
+  const plainTextFields = ['clienteNome', 'cliente_nome', 'nomeCliente', 'obraNome', 'endereco', 'bairro', 'cidade', 'descricao', 'observacao', 'logradouro'];
+  const out: any = { ...record };
+  for (const f of plainTextFields) {
+    if (typeof out[f] === 'string') out[f] = fixEncoding(out[f]);
+  }
+  return out;
 }
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3333';

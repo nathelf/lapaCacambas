@@ -86,11 +86,12 @@ export function formatMoedaNumero(valor: number | string | null | undefined): st
 export function fixEncoding(text: string | null | undefined): string {
   if (!text) return text ?? '';
 
-  // Atalho: se não tem nenhum marcador de corrupção, retorna imediatamente
   const hasFFD  = text.includes('\uFFFD');
   const hasQ    = text.includes('?');
   const hasMoji = text.includes('Ã');
-  if (!hasFFD && !hasQ && !hasMoji) return text;
+  // palavras sem marcador mas com bytes perdidos na migração (ex: EDUCACAO)
+  const hasLost = /\b(EDUCACAO|FUNDACAO|ASSOCIACAO|COMUNICACAO|FABRICACAO|CONSTRUCAO|INSTALACAO|PRESTACAO|PRODUCAO|ADMINISTRACAO|GESTAO|ACAO|SOLUCAO|LOCACAO|SERVICOS|SERVICO|COMERCIO)\b/.test(text);
+  if (!hasFFD && !hasQ && !hasMoji && !hasLost) return text;
 
   let t = text;
   const fd = '\uFFFD'; // U+FFFD ◆
@@ -103,13 +104,13 @@ export function fixEncoding(text: string | null | undefined): string {
   t = t.replace(/Ã"/g, 'Ó').replace(/Ã‰/g, 'É').replace(/Ã€/g, 'À');
   t = t.replace(/Ã‚/g, 'Â').replace(/Ãœ/g, 'Ü');
 
-  // Atalho após mojibake — se restou apenas texto limpo
-  if (!t.includes(fd) && !t.includes('?')) return t;
+  // Atalho após mojibake — se restou apenas texto limpo e sem palavras sem acento
+  if (!t.includes(fd) && !t.includes('?') && !hasLost) return t;
 
   // Função interna: substitui com os dois marcadores (fd e '?')
   const fix = (from: string, to: string) => {
-    t = t.split(from.replace('◆', fd)).join(to);
-    t = t.split(from.replace('◆', '?')).join(to);
+    t = t.split(from.replaceAll('◆', fd)).join(to);
+    t = t.split(from.replaceAll('◆', '?')).join(to);
   };
 
   // ── 2. Terminações -ÇÃO / -ÇÕES  (2 marcadores: Ç + Ã → ◆◆) ───────────────
@@ -201,6 +202,26 @@ export function fixEncoding(text: string | null | undefined): string {
   fix('GOI◆NIA', 'GOIÂNIA');
   fix('LONDRINA', 'LONDRINA');   // sem acento, só garante
   fix('CASCAVEL', 'CASCAVEL');   // sem acento, só garante
+
+  // ── 8. Palavras sem marcador — bytes perdidos na migração ───────────────────
+  // Corrige apenas quando a palavra inteira coincide (evita falsos positivos)
+  t = t.replace(/\bEDUCACAO\b/g, 'EDUCAÇÃO');
+  t = t.replace(/\bFUNDACAO\b/g, 'FUNDAÇÃO');
+  t = t.replace(/\bASSOCIACAO\b/g, 'ASSOCIAÇÃO');
+  t = t.replace(/\bCOMUNICACAO\b/g, 'COMUNICAÇÃO');
+  t = t.replace(/\bFABRICACAO\b/g, 'FABRICAÇÃO');
+  t = t.replace(/\bCONSTRUCAO\b/g, 'CONSTRUÇÃO');
+  t = t.replace(/\bINSTALACAO\b/g, 'INSTALAÇÃO');
+  t = t.replace(/\bPRESTACAO\b/g, 'PRESTAÇÃO');
+  t = t.replace(/\bPRODUCAO\b/g, 'PRODUÇÃO');
+  t = t.replace(/\bADMINISTRACAO\b/g, 'ADMINISTRAÇÃO');
+  t = t.replace(/\bGESTAO\b/g, 'GESTÃO');
+  t = t.replace(/\bACAO\b/g, 'AÇÃO');
+  t = t.replace(/\bSOLUCAO\b/g, 'SOLUÇÃO');
+  t = t.replace(/\bLOCACAO\b/g, 'LOCAÇÃO');
+  t = t.replace(/\bSERVICOS\b/g, 'SERVIÇOS');
+  t = t.replace(/\bSERVICO\b/g, 'SERVIÇO');
+  t = t.replace(/\bCOMERCIO\b/g, 'COMÉRCIO');
 
   // ── 7. Indicadores ordinais (ª e º) após número ────────────────────────────
   // ª (U+00AA) e º (U+00BA) são bytes 0xAA/0xBA em Win-1252 — corrompem para ◆ ou ?

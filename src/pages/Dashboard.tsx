@@ -21,22 +21,12 @@ export default function Dashboard() {
   const today = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
   const { data: stats, isLoading: loadingStats } = useDashboardStats();
-<<<<<<< HEAD
   const { data: pedidosRaw, isLoading: loadingPedidos } = usePedidos();
   const pedidosRecentes = (pedidosRaw as any)?.data ?? [];
   const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesCacamba();
 
   // Calcular pedidos por status para o gráfico de barras
   const pedidosAll = pedidosRecentes;
-=======
-  const { data: pedidosResult, isLoading: loadingPedidos } = usePedidos();
-  const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesCacamba();
-
-  // O backend retorna { data: [], total: N } — extraímos só o array
-  const pedidosAll: any[] = Array.isArray(pedidosResult)
-    ? pedidosResult
-    : (pedidosResult as any)?.data ?? [];
->>>>>>> cb82db1 (alterações no modulo financeiro em andamento)
   const statusCounts: Record<string, number> = {};
   pedidosAll.forEach((p: any) => {
     statusCounts[p.status] = (statusCounts[p.status] || 0) + 1;
