@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Search, Filter, Plus, Loader2, CreditCard } from 'lucide-react';
+import { Search, Plus, Loader2, CreditCard } from 'lucide-react';
 import { useBoletos } from '@/hooks/useQuery';
 import { EmitirBoletoDrawer } from '@/components/financeiro/EmitirBoletoDrawer';
+import { STATUS_BOLETO_LABELS } from '../../../shared/enums';
+import { formatData, formatMoeda } from '@/lib/formatters';
 
 const statusColors: Record<string, string> = {
   pendente:     'status-pendente',
@@ -13,11 +15,6 @@ const statusColors: Record<string, string> = {
   vencido:      'status-cancelado',
   cancelado:    'status-cancelado',
   renegociado:  'status-faturado',
-};
-
-const statusLabels: Record<string, string> = {
-  pendente: 'Pendente', emitido: 'Emitido', enviado: 'Enviado',
-  pago: 'Pago', vencido: 'Vencido', cancelado: 'Cancelado', renegociado: 'Renegociado',
 };
 
 export default function BoletosPage() {
@@ -115,7 +112,7 @@ export default function BoletosPage() {
                   <td>{b.clientes?.nome || '—'}</td>
                   <td className="font-mono text-xs">{b.faturas?.numero || '—'}</td>
                   <td className="font-mono text-xs">{b.pedidos?.numero || '—'}</td>
-                  <td>{b.data_emissao ? new Date(b.data_emissao).toLocaleDateString('pt-BR') : '—'}</td>
+                  <td>{formatData(b.data_emissao)}</td>
                   <td>
                     {b.data_vencimento ? (
                       <span className={
@@ -123,16 +120,16 @@ export default function BoletosPage() {
                           ? 'text-destructive font-medium'
                           : ''
                       }>
-                        {new Date(b.data_vencimento).toLocaleDateString('pt-BR')}
+                        {formatData(b.data_vencimento)}
                       </span>
                     ) : '—'}
                   </td>
                   <td className="text-right tabular-nums font-medium">
-                    R$ {Number(b.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    {formatMoeda(b.valor)}
                   </td>
                   <td>
                     <span className={`status-badge ${statusColors[b.status] || 'status-orcamento'}`}>
-                      {statusLabels[b.status] || b.status}
+                      {STATUS_BOLETO_LABELS[b.status as keyof typeof STATUS_BOLETO_LABELS] || b.status}
                     </span>
                   </td>
                   <td className="font-mono text-xs max-w-[180px] truncate">

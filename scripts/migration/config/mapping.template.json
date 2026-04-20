@@ -18,12 +18,12 @@
         "tipo": "pj"
       },
       "columns": [
-        { "source": "nome_cliente", "target": "nome", "transform": "trim" },
-        { "source": "fantasia", "target": "fantasia", "transform": "trim" },
-        { "source": "email", "target": "email" },
-        { "source": "telefone", "target": "telefone" },
-        { "source": "celular", "target": "celular" },
-        { "source": "obs_cliente", "target": "observacao" }
+        { "source": "nome_cliente", "target": "nome",       "transform": "trim_fix_encoding" },
+        { "source": "fantasia",     "target": "fantasia",   "transform": "trim_fix_encoding" },
+        { "source": "email",        "target": "email",      "transform": "trim" },
+        { "source": "telefone",     "target": "telefone",   "transform": "trim" },
+        { "source": "celular",      "target": "celular",    "transform": "trim" },
+        { "source": "obs_cliente",  "target": "observacao", "transform": "fix_encoding" }
       ]
     },
     "pedidos": {

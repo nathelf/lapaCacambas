@@ -1,8 +1,14 @@
+import type { EmitirProviderPayload } from './providers/fiscal-provider.interface';
 import type { FiscalPreviewDTO, NotaFiscalResponseDTO } from './fiscal.types';
 
 export class FiscalMapper {
-  mapPedidoPreviewToProviderPayload(preview: FiscalPreviewDTO, observacoesFiscais?: string) {
+  mapPedidoPreviewToProviderPayload(
+    preview: FiscalPreviewDTO,
+    observacoesFiscais?: string | null,
+    idempotencyKey?: string,
+  ): EmitirProviderPayload {
     return {
+      idempotencyKey: idempotencyKey ?? '',
       ambiente: preview.ambiente,
       cliente: {
         nome: preview.cliente.nome,
@@ -14,14 +20,15 @@ export class FiscalMapper {
       itens: preview.pedidos.map((p) => ({
         descricao: preview.servico?.descricao || `Pedido ${p.numero}`,
         quantidade: 1,
-        valor_unitario: p.valor,
-        codigo_servico_municipal: preview.servico?.codigo_fiscal || null,
+        valorUnitario: p.valor,
+        codigoServicoMunicipal: preview.servico?.codigo_fiscal || null,
       })),
-      valor_total: preview.valorTotal,
-      codigo_servico: preview.servico?.codigo_fiscal || null,
-      observacoes_fiscais: observacoesFiscais || null,
-      referencia_pedidos: preview.pedidos.map((p) => p.numero),
-      referencia_fatura_id: preview.faturaId,
+      valorTotal: preview.valorTotal,
+      codigoServico: preview.servico?.codigo_fiscal || null,
+      aliquotaIss: preview.servico?.aliquota,
+      observacoesFiscais: observacoesFiscais ?? null,
+      referenciaPedidos: preview.pedidos.map((p) => p.numero),
+      referenciaFaturaId: preview.faturaId,
     };
   }
 
@@ -42,7 +49,7 @@ export class FiscalMapper {
     };
     preview: FiscalPreviewDTO;
     userId: string;
-    observacoesFiscais?: string;
+    observacoesFiscais?: string | null;
     idempotencyKey: string;
   }) {
     const { providerResponse, preview, userId, observacoesFiscais, idempotencyKey } = params;
@@ -84,14 +91,32 @@ export class FiscalMapper {
     return {
       id: row.id,
       status: row.status,
-      numero_nota: row.numero_nota,
-      serie: row.serie,
-      chave_acesso: row.chave_acesso,
-      protocolo: row.protocolo,
-      xml_url: row.xml_url,
-      pdf_url: row.pdf_url,
-      external_id: row.external_id,
-      mensagem_erro: row.mensagem_erro,
+      numero: row.numero ?? row.numero_nota ?? null,
+      numero_nota: row.numero_nota ?? row.numero ?? null,
+      serie: row.serie ?? null,
+      data_emissao: row.data_emissao ?? null,
+      valor_total: Number(row.valor_total ?? 0),
+      base_calculo: Number(row.base_calculo ?? row.valor_total ?? 0),
+      valor_iss: Number(row.valor_iss ?? 0),
+      codigo_servico: row.codigo_servico ?? null,
+      descricao_servico: row.descricao_servico ?? null,
+      observacoes_fiscais: row.observacoes_fiscais ?? null,
+      chave_acesso: row.chave_acesso ?? null,
+      protocolo: row.protocolo ?? null,
+      xml_url: row.xml_url ?? null,
+      pdf_url: row.pdf_url ?? null,
+      external_id: row.external_id ?? null,
+      mensagem_erro: row.mensagem_erro ?? null,
+      ambiente: row.ambiente ?? null,
+      tipo_documento: row.tipo_documento ?? 'NFS-e',
+      cliente_id: row.cliente_id ?? null,
+      clientes: row.clientes ? { id: row.clientes.id, nome: row.clientes.nome } : null,
+      nota_fiscal_pedidos: Array.isArray(row.nota_fiscal_pedidos)
+        ? row.nota_fiscal_pedidos.map((nfp: any) => ({
+            pedido_id: nfp.pedido_id,
+            pedidos: nfp.pedidos ? { numero: nfp.pedidos.numero } : null,
+          }))
+        : [],
       created_at: row.created_at,
     };
   }

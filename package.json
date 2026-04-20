@@ -13,6 +13,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:backend": "vitest run --config vitest.backend.config.ts",
+    "test:backend:watch": "vitest --config vitest.backend.config.ts",
     "restore:supabase": "tsx scripts/supabase-restore.ts",
     "migration:introspect": "tsx scripts/migration/schema-introspect.ts",
     "migration:compare": "tsx scripts/migration/compare-schemas.ts",

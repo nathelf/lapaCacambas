@@ -1,31 +1,72 @@
-import { BaseFiscalProvider, type CancelProviderInput, type EmitProviderInput, type FiscalProviderContext } from './base-fiscal.provider';
-import type { FiscalProviderEmitDTO } from '../fiscal.types';
+import type {
+  IFiscalProvider,
+  FiscalProviderContext,
+  EmitirProviderPayload,
+  EmitirProviderResult,
+  CancelarProviderPayload,
+} from './fiscal-provider.interface';
+import { FiscalIntegrationError } from '../fiscal.errors';
+import { FISCAL_LIMITS } from '../fiscal.constants';
 
-export class HttpFiscalProvider extends BaseFiscalProvider {
-  private getAuthHeaders(ctx: FiscalProviderContext) {
+/**
+ * Provider HTTP genérico para integração real com município.
+ *
+ * Endpoints esperados (padrão comum nos gateways NFS-e):
+ *   POST   {apiBaseUrl}/nfse/emitir
+ *   GET    {apiBaseUrl}/nfse/{externalId}/status
+ *   POST   {apiBaseUrl}/nfse/{externalId}/cancelar
+ *   GET    {apiBaseUrl}/nfse/{externalId}/xml
+ *   GET    {apiBaseUrl}/nfse/{externalId}/pdf
+ *
+ * Para integração com Cascavel/PR: substituir URLs e mapeamento de campos
+ * conforme documentação do gateway municipal (Tecnos, Betha, NFE.io, etc.)
+ */
+export class HttpFiscalProvider implements IFiscalProvider {
+
+  private authHeaders(ctx: FiscalProviderContext): Record<string, string> {
     return {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${ctx.accessToken}`,
     };
   }
 
-  async emitir(ctx: FiscalProviderContext, input: EmitProviderInput): Promise<FiscalProviderEmitDTO> {
-    if (!ctx.apiBaseUrl) throw new Error('api_base_url não definida para provider fiscal.');
+  private async fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+    timeoutMs = FISCAL_LIMITS.TIMEOUT_PROVIDER_MS,
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
-    const res = await fetch(`${ctx.apiBaseUrl}/nfe/emitir`, {
+  async emitir(ctx: FiscalProviderContext, payload: EmitirProviderPayload): Promise<EmitirProviderResult> {
+    if (!ctx.apiBaseUrl) throw new FiscalIntegrationError('api_base_url não definida para provider fiscal.');
+
+    const res = await this.fetchWithTimeout(`${ctx.apiBaseUrl}/nfse/emitir`, {
       method: 'POST',
       headers: {
-        ...this.getAuthHeaders(ctx),
-        'X-Idempotency-Key': input.idempotencyKey,
+        ...this.authHeaders(ctx),
+        'X-Idempotency-Key': payload.idempotencyKey,
       },
-      body: JSON.stringify(input.payload),
+      body: JSON.stringify(payload),
     });
 
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) throw new Error(`Falha provider fiscal emitir: HTTP ${res.status}`);
+
+    if (!res.ok) {
+      throw new FiscalIntegrationError(
+        `Provider fiscal retornou HTTP ${res.status} na emissão.`,
+        { httpStatus: res.status, body: json },
+      );
+    }
 
     return {
-      externalId: String(json.external_id || json.id || input.idempotencyKey),
+      externalId: String(json.external_id || json.id || payload.idempotencyKey),
       numeroNota: String(json.numero_nota || json.numero || ''),
       serie: json.serie ? String(json.serie) : '1',
       status: (json.status as 'emitida' | 'pendente' | 'erro') || 'pendente',
@@ -34,48 +75,57 @@ export class HttpFiscalProvider extends BaseFiscalProvider {
       protocolo: json.protocolo ? String(json.protocolo) : undefined,
       xmlUrl: json.xml_url ? String(json.xml_url) : undefined,
       pdfUrl: json.pdf_url ? String(json.pdf_url) : undefined,
-      providerRequest: input.payload,
+      providerRequest: { ...payload, accessToken: '[MASKED]' },
       providerResponse: json,
       mensagem: json.mensagem ? String(json.mensagem) : undefined,
     };
   }
 
   async consultarStatus(ctx: FiscalProviderContext, externalId: string): Promise<Record<string, unknown>> {
-    if (!ctx.apiBaseUrl) throw new Error('api_base_url não definida para provider fiscal.');
-    const res = await fetch(`${ctx.apiBaseUrl}/nfe/${externalId}/status`, {
-      headers: this.getAuthHeaders(ctx),
-    });
+    if (!ctx.apiBaseUrl) throw new FiscalIntegrationError('api_base_url não definida para provider fiscal.');
+    const res = await this.fetchWithTimeout(
+      `${ctx.apiBaseUrl}/nfse/${externalId}/status`,
+      { headers: this.authHeaders(ctx) },
+    );
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) throw new Error(`Falha provider fiscal status: HTTP ${res.status}`);
+    if (!res.ok) throw new FiscalIntegrationError(`Provider fiscal status: HTTP ${res.status}`, { json });
     return json;
   }
 
-  async cancelar(ctx: FiscalProviderContext, input: CancelProviderInput): Promise<Record<string, unknown>> {
-    if (!ctx.apiBaseUrl) throw new Error('api_base_url não definida para provider fiscal.');
-    const res = await fetch(`${ctx.apiBaseUrl}/nfe/${input.externalId}/cancelar`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(ctx),
-      body: JSON.stringify({ reason: input.reason }),
-    });
+  async cancelar(ctx: FiscalProviderContext, input: CancelarProviderPayload): Promise<Record<string, unknown>> {
+    if (!ctx.apiBaseUrl) throw new FiscalIntegrationError('api_base_url não definida para provider fiscal.');
+    const res = await this.fetchWithTimeout(
+      `${ctx.apiBaseUrl}/nfse/${input.externalId}/cancelar`,
+      {
+        method: 'POST',
+        headers: this.authHeaders(ctx),
+        body: JSON.stringify({ reason: input.reason }),
+      },
+    );
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) throw new Error(`Falha provider fiscal cancelamento: HTTP ${res.status}`);
+    if (!res.ok) throw new FiscalIntegrationError(`Provider fiscal cancelamento: HTTP ${res.status}`, { json });
     return json;
   }
 
   async baixarXml(ctx: FiscalProviderContext, externalId: string): Promise<{ xmlUrl: string | null }> {
-    if (!ctx.apiBaseUrl) throw new Error('api_base_url não definida para provider fiscal.');
-    const res = await fetch(`${ctx.apiBaseUrl}/nfe/${externalId}/xml`, { headers: this.getAuthHeaders(ctx) });
+    if (!ctx.apiBaseUrl) throw new FiscalIntegrationError('api_base_url não definida para provider fiscal.');
+    const res = await this.fetchWithTimeout(
+      `${ctx.apiBaseUrl}/nfse/${externalId}/xml`,
+      { headers: this.authHeaders(ctx) },
+    );
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) throw new Error(`Falha provider fiscal xml: HTTP ${res.status}`);
+    if (!res.ok) throw new FiscalIntegrationError(`Provider fiscal xml: HTTP ${res.status}`, { json });
     return { xmlUrl: (json.xml_url as string) || null };
   }
 
   async baixarPdf(ctx: FiscalProviderContext, externalId: string): Promise<{ pdfUrl: string | null }> {
-    if (!ctx.apiBaseUrl) throw new Error('api_base_url não definida para provider fiscal.');
-    const res = await fetch(`${ctx.apiBaseUrl}/nfe/${externalId}/pdf`, { headers: this.getAuthHeaders(ctx) });
+    if (!ctx.apiBaseUrl) throw new FiscalIntegrationError('api_base_url não definida para provider fiscal.');
+    const res = await this.fetchWithTimeout(
+      `${ctx.apiBaseUrl}/nfse/${externalId}/pdf`,
+      { headers: this.authHeaders(ctx) },
+    );
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) throw new Error(`Falha provider fiscal pdf: HTTP ${res.status}`);
+    if (!res.ok) throw new FiscalIntegrationError(`Provider fiscal pdf: HTTP ${res.status}`, { json });
     return { pdfUrl: (json.pdf_url as string) || null };
   }
 }
-

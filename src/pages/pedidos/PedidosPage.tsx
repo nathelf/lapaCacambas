@@ -179,7 +179,7 @@ export default function PedidosPage() {
                           </button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          {p.status_fiscal === 'emitida' ? 'Ver nota fiscal' : 'Emitir nota fiscal'}
+                          {p.statusFiscal === 'emitida' ? 'Ver nota fiscal' : 'Emitir nota fiscal'}
                         </TooltipContent>
                       </Tooltip>
                     </td>

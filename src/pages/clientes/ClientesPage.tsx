@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ModulePage } from '@/components/shared/ModulePage';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Plus, Search, Eye, Loader2, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { useClientes } from '@/hooks/useQuery';
+import { formatDocumento, formatTelefone } from '@/lib/formatters';
 
 export default function ClientesPage() {
   const navigate = useNavigate();
@@ -99,8 +99,8 @@ export default function ClientesPage() {
                   <td className="font-medium">{c.nome}</td>
                   <td>{c.fantasia || '—'}</td>
                   <td>{c.tipo === 'pj' ? 'PJ' : 'PF'}</td>
-                  <td className="font-mono text-xs">{c.cnpj || c.cpf || '—'}</td>
-                  <td>{c.telefone || c.celular || '—'}</td>
+                  <td className="font-mono text-xs">{formatDocumento(c.cnpj || c.cpf)}</td>
+                  <td>{formatTelefone(c.telefone || c.celular)}</td>
                   <td>{c.cidade ? `${c.cidade}/${c.estado}` : '—'}</td>
                   <td><StatusBadge status={c.status} /></td>
                   <td>

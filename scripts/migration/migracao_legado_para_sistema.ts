@@ -21,7 +21,13 @@ import { applyTransform } from "./lib/transforms.ts";
 
 dotenv.config();
 
-const pgp = pgPromise({});
+const pgp = pgPromise({
+  // Garante que strings chegam como UTF-8 independente do encoding do servidor legado.
+  // Sem isso, bancos WIN1252/LATIN1 enviam bytes que Node.js interpreta errado → mojibake.
+  connect(client) {
+    client.query("SET client_encoding TO 'UTF8'");
+  },
+});
 
 const DRY = process.argv.includes("--dry-run");
 

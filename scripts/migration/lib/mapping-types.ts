@@ -1,6 +1,8 @@
 export type TransformName =
   | "trim"
   | "empty_to_null"
+  | "fix_encoding"
+  | "trim_fix_encoding"
   | "legacy_status_pedido"
   | "legacy_tipo_cliente"
   | "legacy_cliente_status"
