@@ -1,7 +1,7 @@
-import { STATUS_FISCAL_LABELS, type StatusFiscal } from '@/types/enums';
+import { STATUS_NOTA_FISCAL_LABELS, type StatusNotaFiscal } from '@/types/enums';
 
 interface StatusFiscalBadgeProps {
-  status: StatusFiscal;
+  status: StatusNotaFiscal;
 }
 
 const fiscalClassMap: Record<string, string> = {
@@ -14,7 +14,7 @@ const fiscalClassMap: Record<string, string> = {
 
 export function StatusFiscalBadge({ status }: StatusFiscalBadgeProps) {
   const cls = fiscalClassMap[status] || 'status-orcamento';
-  const label = STATUS_FISCAL_LABELS[status] || status;
+  const label = STATUS_NOTA_FISCAL_LABELS[status] || status;
 
   return (
     <span className={`status-badge ${cls}`}>

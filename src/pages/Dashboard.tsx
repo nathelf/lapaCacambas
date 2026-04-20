@@ -24,11 +24,12 @@ export default function Dashboard() {
   const today = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
   const { data: stats, isLoading: loadingStats } = useDashboardStats();
-  const { data: pedidosRecentes = [], isLoading: loadingPedidos } = usePedidos();
+  const { data: pedidosRaw, isLoading: loadingPedidos } = usePedidos();
+  const pedidosRecentes = (pedidosRaw as any)?.data ?? [];
   const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesCacamba();
 
   // Calcular pedidos por status para o gráfico de barras
-  const pedidosAll = pedidosRecentes as any[];
+  const pedidosAll = pedidosRecentes;
   const statusCounts: Record<string, number> = {};
   pedidosAll.forEach((p: any) => {
     statusCounts[p.status] = (statusCounts[p.status] || 0) + 1;

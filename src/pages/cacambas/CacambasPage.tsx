@@ -50,16 +50,16 @@ export default function CacambasPage() {
                   <td className="font-medium">{c.descricao}</td>
                   <td>{c.capacidade || '—'}</td>
                   <td className="text-right tabular-nums">
-                    R$ {Number(c.preco_dia).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {Number(c.precoDia).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </td>
                   <td className="text-right tabular-nums">
-                    R$ {Number(c.preco_semana).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {Number(c.precoSemana).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </td>
                   <td className="text-right tabular-nums">
-                    R$ {Number(c.preco_quinzena).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {Number(c.precoQuinzena).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </td>
                   <td className="text-right tabular-nums">
-                    R$ {Number(c.preco_mes).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {Number(c.precoMes).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </td>
                 </tr>
               ))}
@@ -93,9 +93,9 @@ export default function CacambasPage() {
               {(unidades as any[]).map((u: any) => (
                 <tr key={u.id}>
                   <td className="font-mono text-xs font-medium">{u.patrimonio}</td>
-                  <td>{(u as any).cacambas?.descricao || '—'}</td>
+                  <td>{u.cacamba?.descricao || '—'}</td>
                   <td><StatusBadge status={u.status} labels={STATUS_CACAMBA_LABELS} /></td>
-                  <td>{u.cliente_atual || '—'}</td>
+                  <td>{u.clienteAtual || '—'}</td>
                   <td className="text-xs text-muted-foreground">{u.observacao || '—'}</td>
                 </tr>
               ))}

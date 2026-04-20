@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, ClipboardList, Container,
-  Truck, UserCog, Fuel, Wrench, Receipt, FileText, Wallet,
+  Truck, UserCog, Wrench, Receipt, FileText, Wallet,
   TrendingUp, Package, Boxes, Settings, BarChart3, ChevronDown,
-  MessageSquare, AlertTriangle, MapPin
+  MessageSquare, AlertTriangle, MapPin, Tag
 } from 'lucide-react';
 
 interface MenuItem {
@@ -34,6 +34,7 @@ const menuSections: MenuSection[] = [
       { label: 'Clientes', icon: Users, path: '/clientes' },
       { label: 'Obras', icon: Building2, path: '/obras' },
       { label: 'Comercial', icon: TrendingUp, path: '/comercial' },
+      { label: 'Serviços', icon: Tag, path: '/servicos' },
     ],
   },
   {

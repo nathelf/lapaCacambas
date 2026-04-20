@@ -32,203 +32,151 @@ export async function logAuditoria(acao: string, entidade: string, entidadeId?: 
 }
 
 // ===== CLIENTES =====
-export async function fetchClientes(search?: string) {
-  let query = supabase.from('clientes').select('*').is('deleted_at', null).order('nome');
-  if (search) query = query.or(`nome.ilike.%${search}%,fantasia.ilike.%${search}%,cpf.ilike.%${search}%,cnpj.ilike.%${search}%`);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
+export async function fetchClientes(search?: string, page = 1, limit = 20) {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (search) params.set('busca', search);
+  return backendRequest<{ data: any[]; total: number }>(`/api/clientes?${params}`);
+}
+
+export async function fetchClientesLookup(search?: string) {
+  const params = new URLSearchParams({ limit: '50' });
+  if (search) params.set('busca', search);
+  const result = await backendRequest<{ data: any[]; total: number }>(`/api/clientes?${params}`);
+  return result.data;
 }
 
 export async function fetchCliente(id: number) {
-  const { data, error } = await supabase.from('clientes').select('*').eq('id', id).single();
-  if (error) throw error;
-  return data;
+  return backendRequest<any>(`/api/clientes/${id}`);
 }
 
 export async function createCliente(cliente: any) {
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data, error } = await supabase.from('clientes').insert({ ...cliente, created_by: user?.id } as any).select().single();
-  if (error) throw error;
-  await logAuditoria('criacao', 'clientes', data.id, null, data);
-  return data;
+  return backendRequest<any>('/api/clientes', {
+    method: 'POST',
+    body: JSON.stringify(cliente),
+  });
 }
 
 export async function updateCliente(id: number, cliente: any) {
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: old } = await supabase.from('clientes').select('*').eq('id', id).single();
-  const { data, error } = await supabase.from('clientes').update({ ...cliente, updated_by: user?.id } as any).eq('id', id).select().single();
-  if (error) throw error;
-  await logAuditoria('edicao', 'clientes', id, old, data);
-  return data;
+  return backendRequest<any>(`/api/clientes/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(cliente),
+  });
 }
 
 // ===== CONTATOS =====
 export async function fetchContatos(clienteId: number) {
-  const { data, error } = await supabase.from('contatos_cliente').select('*').eq('cliente_id', clienteId).order('nome');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>(`/api/contatos?clienteId=${clienteId}`);
 }
 
 export async function createContato(contato: any) {
-  const { data, error } = await supabase.from('contatos_cliente').insert(contato as any).select().single();
-  if (error) throw error;
-  return data;
+  const { cliente_id, ...rest } = contato;
+  return backendRequest<any>('/api/contatos', {
+    method: 'POST',
+    body: JSON.stringify({ clienteId: cliente_id, ...rest }),
+  });
 }
 
 // ===== OBRAS =====
 export async function fetchObras(clienteId?: number) {
-  let query = supabase.from('obras').select('*').is('deleted_at', null).order('nome');
-  if (clienteId) query = query.eq('cliente_id', clienteId);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
+  const qs = clienteId ? `?clienteId=${clienteId}` : '';
+  return backendRequest<any[]>(`/api/obras${qs}`);
 }
 
 export async function createObra(obra: any) {
-  const { data, error } = await supabase.from('obras').insert(obra as any).select().single();
-  if (error) throw error;
-  return data;
+  const { cliente_id, ...rest } = obra;
+  return backendRequest<any>('/api/obras', {
+    method: 'POST',
+    body: JSON.stringify({ clienteId: cliente_id, ...rest }),
+  });
 }
 
 // ===== ENDERECOS ENTREGA =====
 export async function fetchEnderecosEntrega(clienteId: number) {
-  const { data, error } = await supabase.from('enderecos_entrega').select('*').eq('cliente_id', clienteId);
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>(`/api/enderecos?clienteId=${clienteId}`);
 }
 
 export async function createEnderecoEntrega(endereco: any) {
-  const { data, error } = await supabase.from('enderecos_entrega').insert(endereco as any).select().single();
-  if (error) throw error;
-  return data;
+  const { cliente_id, obra_id, ...rest } = endereco;
+  return backendRequest<any>('/api/enderecos', {
+    method: 'POST',
+    body: JSON.stringify({ clienteId: cliente_id, obraId: obra_id ?? null, ...rest }),
+  });
 }
 
 // ===== CACAMBAS =====
 export async function fetchCacambas() {
-  const { data, error } = await supabase.from('cacambas').select('*').eq('ativo', true).order('descricao');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/cacambas?ativo=true');
 }
 
 // ===== SERVICOS =====
 export async function fetchServicos() {
-  const { data, error } = await supabase.from('servicos').select('*').eq('ativo', true).order('descricao');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/servicos');
+}
+
+export async function fetchServicosAll() {
+  return fetchServicos();
+}
+
+export async function createServico(dto: { descricao: string; codigoFiscal?: string; aliquota?: number }) {
+  return backendRequest<any>('/api/servicos', { method: 'POST', body: JSON.stringify(dto) });
+}
+
+export async function updateServico(id: number, dto: { descricao?: string; codigoFiscal?: string; aliquota?: number; ativo?: boolean }) {
+  return backendRequest<any>(`/api/servicos/${id}`, { method: 'PUT', body: JSON.stringify(dto) });
+}
+
+export async function toggleServico(id: number) {
+  return backendRequest<any>(`/api/servicos/${id}/toggle`, { method: 'PATCH' });
 }
 
 // ===== MOTORISTAS =====
 export async function fetchMotoristas() {
-  const { data, error } = await supabase.from('motoristas').select('*').eq('status', 'ativo').order('nome');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/motoristas?status=ativo');
 }
 
 export async function fetchMotoristasAll() {
-  const { data, error } = await supabase.from('motoristas').select('*').order('nome');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/motoristas');
 }
 
 // ===== VEICULOS =====
 export async function fetchVeiculos() {
-  const { data, error } = await supabase.from('veiculos').select('*').in('status', ['disponivel', 'em_operacao']).order('placa');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/veiculos?status=disponivel,em_operacao');
 }
 
 export async function fetchVeiculosAll() {
-  const { data, error } = await supabase.from('veiculos').select('*').order('placa');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/veiculos');
 }
 
 // ===== PEDIDOS =====
-export async function fetchPedidos(filters?: { status?: string; clienteId?: number; search?: string }) {
-  let query = supabase.from('pedidos').select('*, clientes!inner(nome, fantasia)').is('deleted_at', null).order('created_at', { ascending: false });
-  if (filters?.status) query = query.eq('status', filters.status as any);
-  if (filters?.clienteId) query = query.eq('cliente_id', filters.clienteId);
-  if (filters?.search) query = query.or(`numero.ilike.%${filters.search}%`);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
+export async function fetchPedidos(filters?: { status?: string; clienteId?: number; search?: string; page?: number }) {
+  const params = new URLSearchParams({ limit: '20' });
+  if (filters?.status)    params.set('status', filters.status);
+  if (filters?.clienteId) params.set('clienteId', String(filters.clienteId));
+  if (filters?.search)    params.set('busca', filters.search);
+  if (filters?.page)      params.set('page', String(filters.page));
+  return backendRequest<{ data: any[]; total: number }>(`/api/pedidos?${params}`);
 }
 
 export async function fetchPedido(id: number) {
-  const { data, error } = await supabase
-    .from('pedidos')
-    .select(`
-      *,
-      clientes(nome, fantasia, cpf, cnpj, inscricao_municipal, inscricao_estadual,
-               endereco, numero, complemento, bairro, cidade, estado, cep, email, telefone),
-      enderecos_entrega(endereco, numero, bairro, cidade, estado, cep, contato, referencia),
-      cacambas(descricao, capacidade),
-      servicos(descricao, codigo_fiscal, aliquota),
-      motoristas_colocacao:motoristas!motorista_colocacao_id(id, nome),
-      veiculos_colocacao:veiculos!veiculo_colocacao_id(id, placa, modelo)
-    `)
-    .eq('id', id)
-    .single();
-  if (error) throw error;
-  const [faturaVinc, boletosVinc] = await Promise.all([
-    supabase
-      .from('fatura_pedidos')
-      .select('fatura_id, valor, faturas(id, numero, status, valor_total, data_vencimento)')
-      .eq('pedido_id', id),
-    (supabase as any)
-      .from('boletos')
-      .select('id, status, valor, data_vencimento, linha_digitavel, fatura_id, nosso_numero')
-      .eq('pedido_id', id)
-      .order('created_at', { ascending: false }),
-  ]);
-
-  return {
-    ...data,
-    faturas_vinculadas: faturaVinc.data || [],
-    boletos_vinculados: boletosVinc.data || [],
-  };
+  return backendRequest<any>(`/api/pedidos/${id}`);
 }
 
 export async function createPedido(pedido: any) {
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data, error } = await supabase.from('pedidos').insert({ ...pedido, created_by: user?.id } as any).select().single();
-  if (error) throw error;
-  await logAuditoria('criacao', 'pedidos', data.id, null, data);
-  await supabase.from('pedido_historico').insert({
-    pedido_id: data.id,
-    status_novo: data.status,
-    observacao: 'Pedido criado',
-    usuario_id: user?.id,
-  } as any);
-  return data;
+  return backendRequest<any>('/api/pedidos', {
+    method: 'POST',
+    body: JSON.stringify(pedido),
+  });
 }
 
 export async function updatePedidoStatus(id: number, statusNovo: string, observacao?: string, extraFields?: any) {
-  const { data: { user } } = await supabase.auth.getUser();
-  const { data: old } = await supabase.from('pedidos').select('status').eq('id', id).single();
-  const updateData: any = { status: statusNovo, updated_by: user?.id, ...extraFields };
-  const { data, error } = await supabase.from('pedidos').update(updateData as any).eq('id', id).select().single();
-  if (error) throw error;
-  await supabase.from('pedido_historico').insert({
-    pedido_id: id,
-    status_anterior: old?.status,
-    status_novo: statusNovo,
-    observacao,
-    usuario_id: user?.id,
-  } as any);
-  await logAuditoria('mudanca_status', 'pedidos', id, { status: old?.status }, { status: statusNovo });
-  return data;
+  return backendRequest<any>(`/api/pedidos/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status: statusNovo, motivo: observacao, ...extraFields }),
+  });
 }
 
 export async function fetchPedidoHistorico(pedidoId: number) {
-  const { data, error } = await supabase
-    .from('pedido_historico')
-    .select('*, profiles:usuario_id(nome)')
-    .eq('pedido_id', pedidoId)
-    .order('created_at');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>(`/api/pedidos/${pedidoId}/historico`);
 }
 
 // ===== FATURAS =====
@@ -408,12 +356,7 @@ export async function fetchMateriais() {
 
 // ===== UNIDADES CACAMBA =====
 export async function fetchUnidadesCacamba() {
-  const { data, error } = await supabase
-    .from('unidades_cacamba')
-    .select('*, cacambas(descricao)')
-    .order('patrimonio');
-  if (error) throw error;
-  return data;
+  return backendRequest<any[]>('/api/cacambas/unidades');
 }
 
 // ===== CONTAS A PAGAR =====
@@ -462,92 +405,127 @@ export interface FiltrosRelatorio {
 }
 
 export async function fetchRelatorioOperacional(filtros: FiltrosRelatorio) {
-  let query = supabase
-    .from('pedidos')
-    .select(`
-      id, numero, status, tipo, tipo_locacao, quantidade, valor_total,
-      data_pedido, data_retirada_prevista, observacao,
-      clientes(nome, fantasia),
-      enderecos_entrega(endereco, numero, bairro, cidade, estado),
-      cacambas(descricao),
-      servicos(descricao),
-      motoristas_colocacao:motoristas!motorista_colocacao_id(nome),
-      veiculos_colocacao:veiculos!veiculo_colocacao_id(placa, modelo)
-    `)
-    .is('deleted_at', null)
-    .order('data_pedido', { ascending: false });
-
-  if (filtros.dataInicio) query = query.gte('data_pedido', filtros.dataInicio);
-  if (filtros.dataFim)    query = query.lte('data_pedido', filtros.dataFim);
-  if (filtros.clienteId)  query = query.eq('cliente_id', filtros.clienteId);
-  if (filtros.status)     query = query.eq('status', filtros.status as any);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  const params = new URLSearchParams();
+  if (filtros.dataInicio) params.set('dataInicio', filtros.dataInicio);
+  if (filtros.dataFim)    params.set('dataFim', filtros.dataFim);
+  if (filtros.clienteId)  params.set('clienteId', String(filtros.clienteId));
+  if (filtros.status)     params.set('status', filtros.status);
+  return backendRequest<any[]>(`/api/relatorios/operacional?${params}`);
 }
 
 export async function fetchRelatorioFinanceiro(filtros: FiltrosRelatorio) {
-  let query = supabase
-    .from('faturas')
-    .select(`
-      id, numero, status, forma_cobranca,
-      data_emissao, data_vencimento, data_baixa,
-      valor_bruto, valor_desconto, valor_juros, valor_multa, valor_liquido, valor_baixa,
-      observacao,
-      clientes(nome, fantasia)
-    `)
-    .order('data_emissao', { ascending: false });
-
-  if (filtros.dataInicio) query = query.gte('data_emissao', filtros.dataInicio);
-  if (filtros.dataFim)    query = query.lte('data_emissao', filtros.dataFim);
-  if (filtros.clienteId)  query = query.eq('cliente_id', filtros.clienteId);
-  if (filtros.status)     query = query.eq('status', filtros.status as any);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  const params = new URLSearchParams();
+  if (filtros.dataInicio) params.set('dataInicio', filtros.dataInicio);
+  if (filtros.dataFim)    params.set('dataFim', filtros.dataFim);
+  if (filtros.clienteId)  params.set('clienteId', String(filtros.clienteId));
+  if (filtros.status)     params.set('status', filtros.status);
+  return backendRequest<any[]>(`/api/relatorios/financeiro?${params}`);
 }
 
 export async function fetchRelatorioBoletosEmitidos(filtros: FiltrosRelatorio) {
-  let query = supabase
-    .from('boletos')
-    .select(`
-      id, nosso_numero, numero_documento, banco,
-      data_emissao, data_vencimento, data_pagamento,
-      valor, valor_multa, valor_juros, valor_pago,
-      status, linha_digitavel, observacao,
-      clientes(nome),
-      faturas(numero),
-      pedidos(numero)
-    `)
-    .order('data_emissao', { ascending: false });
-
-  if (filtros.dataInicio) query = query.gte('data_emissao', filtros.dataInicio);
-  if (filtros.dataFim)    query = query.lte('data_emissao', filtros.dataFim);
-  if (filtros.clienteId)  query = query.eq('cliente_id', filtros.clienteId);
-  if (filtros.status)     query = query.eq('status', filtros.status as any);
-
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+  const params = new URLSearchParams();
+  if (filtros.dataInicio) params.set('dataInicio', filtros.dataInicio);
+  if (filtros.dataFim)    params.set('dataFim', filtros.dataFim);
+  if (filtros.clienteId)  params.set('clienteId', String(filtros.clienteId));
+  if (filtros.status)     params.set('status', filtros.status);
+  return backendRequest<any[]>(`/api/relatorios/boletos?${params}`);
 }
 
 export async function fetchRelatorioInadimplencia(filtros: FiltrosRelatorio) {
-  const hoje = new Date().toISOString().split('T')[0];
-  let query = supabase
-    .from('faturas')
-    .select(`
-      id, numero, status, data_vencimento, valor_liquido,
-      clientes(id, nome, fantasia, telefone, celular, email)
-    `)
-    .in('status', ['aberta', 'vencida', 'protesto'])
-    .lte('data_vencimento', hoje)
-    .order('data_vencimento');
+  const params = new URLSearchParams();
+  if (filtros.clienteId) params.set('clienteId', String(filtros.clienteId));
+  return backendRequest<any[]>(`/api/relatorios/inadimplencia?${params}`);
+}
 
-  if (filtros.clienteId) query = query.eq('cliente_id', filtros.clienteId);
+// ─── Logística ────────────────────────────────────────────────────────────────
 
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+export async function fetchExecucoes(params?: { status?: string; data?: string; semAtribuicao?: boolean; dataInicio?: string; dataFim?: string; page?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.status)        qs.set('status', params.status);
+  if (params?.data)          qs.set('data', params.data);
+  if (params?.semAtribuicao) qs.set('semAtribuicao', 'true');
+  if (params?.dataInicio)    qs.set('dataInicio', params.dataInicio);
+  if (params?.dataFim)       qs.set('dataFim', params.dataFim);
+  if (params?.page)          qs.set('page', String(params.page));
+  if (params?.page)          qs.set('limit', '20');
+  return backendRequest<any[] | { data: any[]; total: number }>(`/api/logistica/execucoes?${qs}`);
+}
+
+export async function atribuirExecucao(id: number, motoristaId: number, veiculoId: number) {
+  return backendRequest<any>(`/api/logistica/execucoes/${id}/atribuir`, {
+    method: 'PUT',
+    body: JSON.stringify({ motoristaId, veiculoId }),
+  });
+}
+
+export async function atualizarStatusExecucao(id: number, status: string, extra?: { observacao?: string }) {
+  return backendRequest<any>(`/api/logistica/execucoes/${id}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status, ...extra }),
+  });
+}
+
+export async function fetchRotas(params?: { data?: string; motoristaId?: number; status?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.data)        qs.set('data', params.data);
+  if (params?.motoristaId) qs.set('motoristaId', String(params.motoristaId));
+  if (params?.status)      qs.set('status', params.status);
+  return backendRequest<any[]>(`/api/logistica/rotas?${qs}`);
+}
+
+export async function fetchRota(id: number) {
+  return backendRequest<any>(`/api/logistica/rotas/${id}`);
+}
+
+export async function criarRota(dto: { data: string; motoristaId: number; veiculoId: number; observacao?: string }) {
+  return backendRequest<any>('/api/logistica/rotas', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function atualizarStatusRota(id: number, status: string) {
+  return backendRequest<any>(`/api/logistica/rotas/${id}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function adicionarParadaRota(rotaId: number, dto: { pedidoId?: number; ordem: number; endereco?: string; tipo?: string }) {
+  return backendRequest<any>(`/api/logistica/rotas/${rotaId}/paradas`, {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function removerParadaRota(rotaId: number, paradaId: number) {
+  return backendRequest<void>(`/api/logistica/rotas/${rotaId}/paradas/${paradaId}`, { method: 'DELETE' });
+}
+
+// ===== USUÁRIOS =====
+export async function fetchUsuarios(busca?: string) {
+  const params = new URLSearchParams();
+  if (busca) params.set('busca', busca);
+  const qs = params.toString();
+  return backendRequest<any[]>(`/api/usuarios${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchUsuario(id: string) {
+  return backendRequest<any>(`/api/usuarios/${id}`);
+}
+
+export async function createUsuario(dto: { email: string; password: string; nome?: string; role: string }) {
+  return backendRequest<any>('/api/usuarios', { method: 'POST', body: JSON.stringify(dto) });
+}
+
+export async function updateUsuario(id: string, dto: { email?: string; nome?: string; password?: string; roles?: string[] }) {
+  return backendRequest<any>(`/api/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(dto) });
+}
+
+export async function patchUsuarioStatus(id: string, ativo: boolean) {
+  return backendRequest<any>(`/api/usuarios/${id}/status`, { method: 'PATCH', body: JSON.stringify({ ativo }) });
+}
+
+export async function deleteUsuario(id: string) {
+  return backendRequest<void>(`/api/usuarios/${id}`, { method: 'DELETE' });
 }

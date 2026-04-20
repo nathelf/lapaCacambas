@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ModulePage } from '@/components/shared/ModulePage';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
-import { Plus, Search, Filter, Eye, Loader2, Users } from 'lucide-react';
+import { Plus, Search, Eye, Loader2, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { useClientes } from '@/hooks/useQuery';
 
@@ -11,11 +11,17 @@ export default function ClientesPage() {
   const navigate = useNavigate();
   const [busca, setBusca] = useState('');
   const [buscaAtiva, setBuscaAtiva] = useState('');
+  const [page, setPage] = useState(1);
+  const LIMIT = 20;
 
-  const { data: clientes = [], isLoading } = useClientes(buscaAtiva || undefined);
+  const { data, isLoading } = useClientes(buscaAtiva || undefined, page);
+  const clientes = data?.data ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / LIMIT);
 
   const handleBusca = (e: React.FormEvent) => {
     e.preventDefault();
+    setPage(1);
     setBuscaAtiva(busca.trim());
   };
 
@@ -46,7 +52,7 @@ export default function ClientesPage() {
           <Search className="w-4 h-4 mr-1" /> Buscar
         </Button>
         {buscaAtiva && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => { setBusca(''); setBuscaAtiva(''); }}>
+          <Button type="button" variant="ghost" size="sm" onClick={() => { setBusca(''); setBuscaAtiva(''); setPage(1); }}>
             Limpar
           </Button>
         )}
@@ -110,6 +116,30 @@ export default function ClientesPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>{total} clientes · página {page} de {totalPages}</span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 1}
+              onClick={() => setPage(p => p - 1)}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === totalPages}
+              onClick={() => setPage(p => p + 1)}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       )}
     </div>

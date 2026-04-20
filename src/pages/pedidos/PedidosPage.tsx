@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { StatusFiscalBadge } from '@/components/shared/StatusFiscalBadge';
@@ -7,27 +7,32 @@ import { EmitirNotaFiscalDrawer } from '@/components/pedidos/EmitirNotaFiscalDra
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Plus, Search, Filter, FileText, Eye, Loader2 } from 'lucide-react';
+import { Plus, Search, Filter, FileText, Eye, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { usePedidos } from '@/hooks/useQuery';
 import { toast } from 'sonner';
+
+const LIMIT = 20;
 
 export default function PedidosPage() {
   const navigate = useNavigate();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [busca, setBusca] = useState('');
+  const [buscaAtiva, setBuscaAtiva] = useState('');
+  const [page, setPage] = useState(1);
 
-  const { data: pedidos = [], isLoading, refetch } = usePedidos({ search: busca || undefined });
+  const { data: result, isLoading, refetch } = usePedidos({ search: buscaAtiva || undefined, page });
+  const pedidos: any[] = result?.data ?? [];
+  const total = result?.total ?? 0;
+  const totalPages = Math.ceil(total / LIMIT);
 
-  const filteredPedidos = pedidos;
-
-  const allSelected = filteredPedidos.length > 0 && filteredPedidos.every((p: any) => selectedIds.has(p.id));
+  const allSelected = pedidos.length > 0 && pedidos.every((p: any) => selectedIds.has(p.id));
 
   const toggleAll = () => {
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filteredPedidos.map((p: any) => p.id)));
+      setSelectedIds(new Set(pedidos.map((p: any) => p.id)));
     }
   };
 
@@ -40,7 +45,7 @@ export default function PedidosPage() {
     });
   };
 
-  const selectedPedidos = filteredPedidos.filter((p: any) => selectedIds.has(p.id));
+  const selectedPedidos = pedidos.filter((p: any) => selectedIds.has(p.id));
 
   const handleEmitirLote = () => {
     if (selectedPedidos.length === 0) {
@@ -52,7 +57,7 @@ export default function PedidosPage() {
 
   const handleEmitirIndividual = (pedido: any, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (pedido.status_fiscal === 'emitida') {
+    if (pedido.statusFiscal === 'emitida') {
       toast.info('Nota já emitida para este pedido');
       return;
     }
@@ -63,6 +68,12 @@ export default function PedidosPage() {
   const handleEmitido = () => {
     setSelectedIds(new Set());
     refetch();
+  };
+
+  const handleBusca = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPage(1);
+    setBuscaAtiva(busca.trim());
   };
 
   return (
@@ -84,7 +95,7 @@ export default function PedidosPage() {
         }
       />
 
-      <div className="flex items-center gap-3">
+      <form onSubmit={handleBusca} className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
@@ -95,12 +106,20 @@ export default function PedidosPage() {
             className="w-full h-9 pl-9 pr-3 rounded-md border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-        <Button variant="outline" size="sm"><Filter className="w-4 h-4 mr-1" /> Filtros</Button>
-      </div>
+        <Button type="submit" variant="outline" size="sm">
+          <Search className="w-4 h-4 mr-1" /> Buscar
+        </Button>
+        {buscaAtiva && (
+          <Button type="button" variant="ghost" size="sm" onClick={() => { setBusca(''); setBuscaAtiva(''); setPage(1); }}>
+            Limpar
+          </Button>
+        )}
+        <Button type="button" variant="outline" size="sm"><Filter className="w-4 h-4 mr-1" /> Filtros</Button>
+      </form>
 
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-      ) : filteredPedidos.length === 0 ? (
+      ) : pedidos.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <p className="text-sm">Nenhum pedido encontrado</p>
           <Button size="sm" className="mt-3" onClick={() => navigate('/pedidos/novo')}>
@@ -127,7 +146,7 @@ export default function PedidosPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredPedidos.map((p: any) => (
+                {pedidos.map((p: any) => (
                   <tr key={p.id} className="cursor-pointer" onClick={() => navigate(`/pedidos/${p.id}`)}>
                     <td onClick={e => e.stopPropagation()}>
                       <Checkbox
@@ -137,26 +156,26 @@ export default function PedidosPage() {
                       />
                     </td>
                     <td className="font-mono text-xs font-medium">{p.numero}</td>
-                    <td>{p.data_pedido ? new Date(p.data_pedido).toLocaleDateString('pt-BR') : '—'}</td>
-                    <td>{(p as any).clientes?.nome || '—'}</td>
+                    <td>{p.dataPedido ? new Date(p.dataPedido).toLocaleDateString('pt-BR') : '—'}</td>
+                    <td>{p.clienteNome || '—'}</td>
                     <td className="text-xs">{p.tipo?.replace(/_/g, ' ')}</td>
                     <td><StatusBadge status={p.status} /></td>
                     <td>
-                      <StatusFiscalBadge status={p.status_fiscal} />
+                      <StatusFiscalBadge status={p.statusFiscal} />
                     </td>
-                    <td className="text-right tabular-nums">R$ {Number(p.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                    <td className="text-right tabular-nums">R$ {Number(p.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                     <td onClick={e => e.stopPropagation()}>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
                             onClick={(e) => handleEmitirIndividual(p, e)}
                             className={`p-1.5 rounded-md transition-colors ${
-                              p.status_fiscal === 'emitida'
+                              p.statusFiscal === 'emitida'
                                 ? 'text-[hsl(var(--success))] hover:bg-[hsl(var(--success))]/10'
                                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                             }`}
                           >
-                            {p.status_fiscal === 'emitida' ? <Eye className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                            {p.statusFiscal === 'emitida' ? <Eye className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
                           </button>
                         </TooltipTrigger>
                         <TooltipContent>
@@ -172,17 +191,31 @@ export default function PedidosPage() {
         </div>
       )}
 
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-muted-foreground">
+          <span>{total} pedidos · página {page} de {totalPages}</span>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       <EmitirNotaFiscalDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         pedidos={selectedPedidos.map((p: any) => ({
           id: p.id,
           numero: p.numero,
-          cliente: (p as any).clientes?.nome || '—',
-          clienteId: p.cliente_id,
-          valor: Number(p.valor_total || 0),
+          cliente: p.clienteNome || '—',
+          clienteId: p.clienteId,
+          valor: Number(p.valorTotal || 0),
           status: p.status,
-          statusFiscal: p.status_fiscal,
+          statusFiscal: p.statusFiscal,
         }))}
         onEmitido={handleEmitido}
       />
