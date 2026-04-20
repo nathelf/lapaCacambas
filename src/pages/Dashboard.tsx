@@ -4,6 +4,8 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { AlertTriangle, Calendar, CheckCircle2, Container, CreditCard, Truck, Clock, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { useDashboardStats, usePedidos, useUnidadesCacamba } from '@/hooks/useQuery';
+import { STATUS_CACAMBA_LABELS, STATUS_PEDIDO_LABELS } from '../../shared/enums';
+import { formatMoeda, formatData } from '@/lib/formatters';
 
 const CACAMBA_COLORS: Record<string, string> = {
   disponivel:   'hsl(142, 72%, 29%)',
@@ -14,34 +16,39 @@ const CACAMBA_COLORS: Record<string, string> = {
   indisponivel: 'hsl(0, 72%, 51%)',
 };
 
-const CACAMBA_LABELS: Record<string, string> = {
-  disponivel: 'Disponível', em_uso: 'Em Uso', em_rota: 'Em Rota',
-  reservada: 'Reservada', manutencao: 'Manutenção', indisponivel: 'Indisponível',
-};
-
 export default function Dashboard() {
   const navigate = useNavigate();
   const today = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
   const { data: stats, isLoading: loadingStats } = useDashboardStats();
+<<<<<<< HEAD
   const { data: pedidosRaw, isLoading: loadingPedidos } = usePedidos();
   const pedidosRecentes = (pedidosRaw as any)?.data ?? [];
   const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesCacamba();
 
   // Calcular pedidos por status para o gráfico de barras
   const pedidosAll = pedidosRecentes;
+=======
+  const { data: pedidosResult, isLoading: loadingPedidos } = usePedidos();
+  const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesCacamba();
+
+  // O backend retorna { data: [], total: N } — extraímos só o array
+  const pedidosAll: any[] = Array.isArray(pedidosResult)
+    ? pedidosResult
+    : (pedidosResult as any)?.data ?? [];
+>>>>>>> cb82db1 (alterações no modulo financeiro em andamento)
   const statusCounts: Record<string, number> = {};
   pedidosAll.forEach((p: any) => {
     statusCounts[p.status] = (statusCounts[p.status] || 0) + 1;
   });
 
   const pedidosBarData = [
-    { name: 'Orçamento',  value: statusCounts['orcamento']    || 0 },
-    { name: 'Programado', value: statusCounts['programado']   || 0 },
-    { name: 'Em Rota',    value: statusCounts['em_rota']      || 0 },
-    { name: 'Execução',   value: statusCounts['em_execucao']  || 0 },
-    { name: 'Concluído',  value: statusCounts['concluido']    || 0 },
-    { name: 'Faturado',   value: statusCounts['faturado']     || 0 },
+    { name: STATUS_PEDIDO_LABELS['orcamento'],    value: statusCounts['orcamento']   || 0 },
+    { name: STATUS_PEDIDO_LABELS['programado'],   value: statusCounts['programado']  || 0 },
+    { name: STATUS_PEDIDO_LABELS['em_rota'],      value: statusCounts['em_rota']     || 0 },
+    { name: STATUS_PEDIDO_LABELS['em_execucao'],  value: statusCounts['em_execucao'] || 0 },
+    { name: STATUS_PEDIDO_LABELS['concluido'],    value: statusCounts['concluido']   || 0 },
+    { name: STATUS_PEDIDO_LABELS['faturado'],     value: statusCounts['faturado']    || 0 },
   ];
 
   // Calcular caçambas por status para o gráfico de pizza
@@ -52,7 +59,7 @@ export default function Dashboard() {
   });
 
   const cacambasPieData = Object.entries(cacambaStatusCounts).map(([status, value]) => ({
-    name: CACAMBA_LABELS[status] || status,
+    name: STATUS_CACAMBA_LABELS[status as keyof typeof STATUS_CACAMBA_LABELS] || status,
     value,
     color: CACAMBA_COLORS[status] || 'hsl(var(--muted))',
   }));
@@ -230,11 +237,11 @@ export default function Dashboard() {
                     onClick={() => navigate(`/pedidos/${p.id}`)}
                   >
                     <td className="font-mono text-xs font-medium">{p.numero}</td>
-                    <td>{(p.clientes as any)?.fantasia || (p.clientes as any)?.nome || '—'}</td>
-                    <td>{p.data_pedido ? new Date(p.data_pedido).toLocaleDateString('pt-BR') : '—'}</td>
+                    <td>{p.clienteNome || '—'}</td>
+                    <td>{formatData(p.dataPedido)}</td>
                     <td><StatusBadge status={p.status} /></td>
                     <td className="text-right tabular-nums">
-                      R$ {Number(p.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {formatMoeda(p.valorTotal)}
                     </td>
                   </tr>
                 ))}

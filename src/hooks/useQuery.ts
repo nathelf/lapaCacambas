@@ -40,7 +40,7 @@ export function useUpdateCliente() {
 }
 
 // ===== PEDIDOS =====
-export function usePedidos(filters?: { status?: string; clienteId?: number; search?: string; page?: number }) {
+export function usePedidos(filters?: { status?: string; clienteId?: number; search?: string; page?: number; limit?: number }) {
   return useQuery({ queryKey: ['pedidos', filters], queryFn: () => api.fetchPedidos(filters) });
 }
 
@@ -97,6 +97,22 @@ export function useCreateFatura() {
 // ===== NOTAS FISCAIS =====
 export function useNotasFiscais(filters?: { status?: string; search?: string }) {
   return useQuery({ queryKey: ['notas-fiscais', filters], queryFn: () => api.fetchNotasFiscais(filters) });
+}
+
+export function useEmitirNotaFiscal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      pedidoIds: number[];
+      faturaId?: number | null;
+      forcarEmissao?: boolean;
+      observacoesFiscais?: string | null;
+    }) => api.emitirNotaFiscal(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notas-fiscais'] });
+      qc.invalidateQueries({ queryKey: ['pedidos'] });
+    },
+  });
 }
 
 export function useCreateNotaFiscal() {

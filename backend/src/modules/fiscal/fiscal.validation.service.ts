@@ -58,13 +58,13 @@ export class FiscalValidationService {
   }
 
   private async validarPreview(preview: FiscalPreviewDTO | null): Promise<FiscalValidationResultDTO> {
-    const erros: Array<{ code: string; message: string; field?: string }> = [];
+    const erros: Array<{ code: string; message: string; field?: string; details?: Record<string, unknown> }> = [];
     const alertas: string[] = [];
 
     if (!preview) {
       return {
         apto_para_emissao: false,
-        erros: [{ code: 'PEDIDO_NOT_FOUND', message: 'Pedido não encontrado.' }],
+        erros: [{ code: 'PEDIDO_NOT_FOUND', message: 'Pedido(s) não encontrado(s) ou lista vazia.' }],
         alertas,
         preview: null,
       };
@@ -74,49 +74,135 @@ export class FiscalValidationService {
     const config = await this.repo.getConfiguracaoFiscalAtiva(preview.empresaId);
 
     for (const p of pedidos) {
-      if (p.status === 'cancelado') erros.push({ code: 'PEDIDO_CANCELADO', message: `Pedido ${p.numero} está cancelado.` });
+      if (p.status === 'cancelado') {
+        erros.push({
+          code: 'PEDIDO_CANCELADO',
+          message: `Pedido ${p.numero} (id: ${p.id}) está cancelado e não pode ser faturado.`,
+          field: 'status',
+          details: { pedidoId: p.id, numero: p.numero, status: p.status },
+        });
+      }
       if (!['concluido', 'faturado'].includes(p.status) && !p.faturavel) {
-        erros.push({ code: 'PEDIDO_NAO_FATURAVEL', message: `Pedido ${p.numero} não está concluído/faturável.` });
+        erros.push({
+          code: 'PEDIDO_NAO_FATURAVEL',
+          message: `Pedido ${p.numero} (id: ${p.id}) tem status "${p.status}" — apenas "concluido" ou "faturado" são elegíveis.`,
+          field: 'status',
+          details: { pedidoId: p.id, numero: p.numero, status: p.status, faturavel: p.faturavel },
+        });
       }
-      if (!p.servico_id) erros.push({ code: 'SERVICO_OBRIGATORIO', message: `Pedido ${p.numero} sem serviço.` });
-      if (Number(p.valor_total || 0) <= 0) erros.push({ code: 'VALOR_INVALIDO', message: `Pedido ${p.numero} com valor inválido.` });
+      if (!p.servico_id) {
+        erros.push({
+          code: 'SERVICO_OBRIGATORIO',
+          message: `Pedido ${p.numero} (id: ${p.id}) não tem serviço vinculado. Associe um serviço com código fiscal antes de emitir.`,
+          field: 'servico_id',
+          details: { pedidoId: p.id, numero: p.numero },
+        });
+      }
+      const valorTotal = Number(p.valor_total || 0);
+      if (valorTotal <= 0) {
+        erros.push({
+          code: 'VALOR_INVALIDO',
+          message: `Pedido ${p.numero} (id: ${p.id}) tem valor_total = ${valorTotal.toFixed(2)} — deve ser maior que zero.`,
+          field: 'valor_total',
+          details: { pedidoId: p.id, numero: p.numero, valor_total: valorTotal },
+        });
+      }
       if (p.status_fiscal === 'emitida' || p.nota_fiscal_status === 'emitida') {
-        erros.push({ code: 'NOTA_JA_EMITIDA', message: `Pedido ${p.numero} já possui nota autorizada.` });
+        erros.push({
+          code: 'NOTA_JA_EMITIDA',
+          message: `Pedido ${p.numero} (id: ${p.id}) já possui nota fiscal autorizada. Use "forcarEmissao: true" apenas se necessário.`,
+          field: 'status_fiscal',
+          details: { pedidoId: p.id, numero: p.numero, status_fiscal: p.status_fiscal, nota_fiscal_id: p.nota_fiscal_id },
+        });
       }
     }
 
-    const cliente = pedidos[0]?.clientes;
-    if (!cliente) erros.push({ code: 'CLIENTE_NOT_FOUND', message: 'Cliente não encontrado.' });
-    if (cliente && !(cliente.cnpj || cliente.cpf)) {
-      erros.push({ code: 'CLIENTE_DOC_INVALIDO', message: 'Cliente sem CPF/CNPJ válido.' });
-    }
-    if (cliente && !cliente.endereco) {
-      erros.push({ code: 'DADOS_FISCAIS_MINIMOS', message: 'Cliente sem endereço fiscal mínimo.' });
-    }
-
-    if (!config) {
-      erros.push({ code: 'CONFIG_FISCAL_NOT_FOUND', message: 'Configuração fiscal ativa não encontrada.' });
-    } else {
-      if (!config.ambiente) erros.push({ code: 'AMBIENTE_FISCAL_INVALIDO', message: 'Ambiente fiscal não definido.' });
-      if (!config.api_key && !(config.client_id && config.client_secret)) {
-        erros.push({ code: 'CREDENCIAIS_FISCAIS_INVALIDAS', message: 'Credenciais fiscais mínimas ausentes.' });
-      }
-    }
-
+    // Validação de cliente único no lote
     if (preview.pedidos.length > 1) {
       const clienteIds = new Set(preview.pedidos.map((p) => p.cliente_id));
       if (clienteIds.size > 1) {
-        erros.push({ code: 'LOTE_MULTIPLOS_CLIENTES', message: 'Lote fiscal com múltiplos clientes não é permitido.' });
+        erros.push({
+          code: 'LOTE_MULTIPLOS_CLIENTES',
+          message: `Lote fiscal com ${clienteIds.size} clientes diferentes não é permitido. Todos os pedidos devem ser do mesmo cliente.`,
+          details: { clienteIds: Array.from(clienteIds) },
+        });
       }
     }
 
-    if (preview.faturaId) {
-      const fatura = await this.repo.getFaturaById(preview.faturaId);
-      if (!fatura) erros.push({ code: 'FATURA_NOT_FOUND', message: 'Fatura não encontrada.' });
+    // Validação do cliente
+    const cliente = pedidos[0]?.clientes as any;
+    if (!cliente) {
+      erros.push({
+        code: 'CLIENTE_NOT_FOUND',
+        message: `Cliente id=${pedidos[0]?.cliente_id} não encontrado.`,
+        field: 'cliente_id',
+      });
+    } else {
+      if (!(cliente.cnpj || cliente.cpf)) {
+        erros.push({
+          code: 'CLIENTE_DOC_INVALIDO',
+          message: `Cliente "${cliente.nome}" (id: ${cliente.id}) sem CPF/CNPJ cadastrado — obrigatório para NF-e.`,
+          field: 'cliente.documento',
+          details: { clienteId: cliente.id, nome: cliente.nome },
+        });
+      }
+      if (!cliente.endereco) {
+        erros.push({
+          code: 'DADOS_FISCAIS_MINIMOS',
+          message: `Cliente "${cliente.nome}" (id: ${cliente.id}) sem endereço cadastrado — obrigatório para NF-e.`,
+          field: 'cliente.endereco',
+          details: { clienteId: cliente.id, nome: cliente.nome },
+        });
+      }
     }
 
+    // Validação da configuração fiscal
+    if (!config) {
+      erros.push({
+        code: 'CONFIG_FISCAL_NOT_FOUND',
+        message: 'Nenhuma configuração fiscal ativa encontrada. Execute a migration de seed fiscal (supabase/migrations/20260415000000_fiscal_sprint1_hardening.sql).',
+      });
+    } else {
+      if (!config.ambiente) {
+        erros.push({
+          code: 'AMBIENTE_FISCAL_INVALIDO',
+          message: `Configuração fiscal id=${config.id} sem campo "ambiente" definido (homologacao|producao).`,
+          field: 'ambiente',
+          details: { configId: config.id },
+        });
+      }
+      if (!config.api_key && !(config.client_id && config.client_secret)) {
+        erros.push({
+          code: 'CREDENCIAIS_FISCAIS_INVALIDAS',
+          message: `Configuração fiscal id=${config.id} sem credenciais: defina api_key OU (client_id + client_secret).`,
+          field: 'credenciais',
+          details: { configId: config.id, temApiKey: !!config.api_key, temClientId: !!config.client_id },
+        });
+      }
+    }
+
+    // Validação de fatura vinculada
+    if (preview.faturaId) {
+      const fatura = await this.repo.getFaturaById(preview.faturaId);
+      if (!fatura) {
+        erros.push({
+          code: 'FATURA_NOT_FOUND',
+          message: `Fatura id=${preview.faturaId} não encontrada.`,
+          field: 'faturaId',
+          details: { faturaId: preview.faturaId },
+        });
+      }
+    }
+
+    // Alertas não bloqueantes
     if (preview.valorTotal > 100000) {
-      alertas.push('Valor total elevado; revisar impostos antes da emissão.');
+      alertas.push(`Valor total R$ ${preview.valorTotal.toFixed(2)} é elevado — revisar alíquotas e impostos antes da emissão.`);
+    }
+    if (!preview.servico?.codigo_fiscal) {
+      alertas.push('Serviço sem código fiscal municipal definido. O campo codigo_servico_municipal ficará vazio na NF-e.');
+    }
+    if (preview.ambiente !== 'producao') {
+      alertas.push(`Emissão em ambiente "${preview.ambiente || 'não definido'}" — nota não terá validade fiscal.`);
     }
 
     return {

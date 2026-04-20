@@ -1,4 +1,14 @@
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeCliente } from '@/lib/formatters';
+
+/** Normaliza o sub-objeto `clientes` embutido em pedidos, faturas, boletos etc. */
+function normalizeNested(record: any): any {
+  if (!record || typeof record !== 'object') return record;
+  if (record.clientes && typeof record.clientes === 'object') {
+    record = { ...record, clientes: normalizeCliente(record.clientes) };
+  }
+  return record;
+}
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3333';
 
@@ -14,7 +24,13 @@ async function backendRequest<T = any>(path: string, init?: RequestInit): Promis
     },
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((json as any)?.message || `Erro backend (${res.status})`);
+  if (!res.ok) {
+    const j = json as any;
+    // Novo formato: { success: false, error: { code, message, details } }
+    const msg = j?.error?.message || j?.message || `Erro backend (${res.status})`;
+    const err = Object.assign(new Error(msg), { code: j?.error?.code, details: j?.error?.details, status: res.status });
+    throw err;
+  }
   return json as T;
 }
 
@@ -35,18 +51,20 @@ export async function logAuditoria(acao: string, entidade: string, entidadeId?: 
 export async function fetchClientes(search?: string, page = 1, limit = 20) {
   const params = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (search) params.set('busca', search);
-  return backendRequest<{ data: any[]; total: number }>(`/api/clientes?${params}`);
+  const result = await backendRequest<{ data: any[]; total: number }>(`/api/clientes?${params}`);
+  return { ...result, data: result.data.map(normalizeCliente) };
 }
 
 export async function fetchClientesLookup(search?: string) {
   const params = new URLSearchParams({ limit: '50' });
   if (search) params.set('busca', search);
   const result = await backendRequest<{ data: any[]; total: number }>(`/api/clientes?${params}`);
-  return result.data;
+  return result.data.map(normalizeCliente);
 }
 
 export async function fetchCliente(id: number) {
-  return backendRequest<any>(`/api/clientes/${id}`);
+  const c = await backendRequest<any>(`/api/clientes/${id}`);
+  return normalizeCliente(c);
 }
 
 export async function createCliente(cliente: any) {
@@ -148,17 +166,25 @@ export async function fetchVeiculosAll() {
 }
 
 // ===== PEDIDOS =====
-export async function fetchPedidos(filters?: { status?: string; clienteId?: number; search?: string; page?: number }) {
-  const params = new URLSearchParams({ limit: '20' });
+export async function fetchPedidos(filters?: {
+  status?: string;
+  clienteId?: number;
+  search?: string;
+  page?: number;
+  /** Quantidade de registros por página. Padrão: 20. Máximo aceito pelo backend: 100. */
+  limit?: number;
+}) {
+  const params = new URLSearchParams({ limit: String(filters?.limit ?? 20) });
   if (filters?.status)    params.set('status', filters.status);
   if (filters?.clienteId) params.set('clienteId', String(filters.clienteId));
   if (filters?.search)    params.set('busca', filters.search);
   if (filters?.page)      params.set('page', String(filters.page));
-  return backendRequest<{ data: any[]; total: number }>(`/api/pedidos?${params}`);
+  const result = await backendRequest<{ data: any[]; total: number }>(`/api/pedidos?${params}`);
+  return { ...result, data: result.data.map(normalizeNested) };
 }
 
 export async function fetchPedido(id: number) {
-  return backendRequest<any>(`/api/pedidos/${id}`);
+  return normalizeNested(await backendRequest<any>(`/api/pedidos/${id}`));
 }
 
 export async function createPedido(pedido: any) {
@@ -186,7 +212,7 @@ export async function fetchFaturas(filters?: { status?: string; clienteId?: numb
   if (filters?.clienteId) query = query.eq('cliente_id', filters.clienteId);
   const { data, error } = await query;
   if (error) throw error;
-  return data;
+  return (data ?? []).map(normalizeNested);
 }
 
 export async function createFatura(fatura: any, pedidoIds: number[]) {
@@ -227,51 +253,50 @@ export async function createFatura(fatura: any, pedidoIds: number[]) {
 }
 
 // ===== NOTAS FISCAIS =====
+// Listagem via backend (mesmo contexto de emissão/cancelamento — dados sempre consistentes)
 export async function fetchNotasFiscais(filters?: { status?: string; search?: string }) {
-  let query = supabase
-    .from('notas_fiscais')
-    .select('*, clientes(nome), nota_fiscal_pedidos(pedido_id, pedidos(numero))')
-    .order('created_at', { ascending: false });
-  if (filters?.status) query = query.eq('status', filters.status as any);
-  if (filters?.search) query = query.or(`numero.ilike.%${filters.search}%`);
-  const { data, error } = await query;
-  if (error) throw error;
-  return data;
+  const params = new URLSearchParams({ limit: '100' });
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.search) params.set('search', filters.search);
+  const res = await backendRequest<{ success: boolean; data: any[] }>(`/api/fiscal/notas?${params}`);
+  return Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
 }
 
-export async function createNotaFiscal(nota: any, pedidoIds: number[]) {
-  const result = await backendRequest<any>('/api/fiscal/emitir', {
+export async function emitirNotaFiscal(input: {
+  pedidoIds: number[];
+  faturaId?: number | null;
+  forcarEmissao?: boolean;
+  observacoesFiscais?: string | null;
+}): Promise<{ ok: boolean; nota: any; validation: any; idempotent: boolean }> {
+  const res = await backendRequest<{ success: boolean; data: any }>('/api/fiscal/emitir', {
     method: 'POST',
-    body: JSON.stringify({
-      pedidoIds,
-      faturaId: nota?.fatura_id ?? null,
-      forcarEmissao: false,
-      observacoesFiscais: nota?.observacao_fiscal || null,
-    }),
+    body: JSON.stringify(input),
   });
+  const result = res?.data ?? res;
   if (!result?.ok) {
     const errs = (result?.validation?.erros || []).map((e: any) => e.message).join('; ');
-    throw new Error(errs || 'Pedido não apto para emissão fiscal.');
+    throw Object.assign(new Error(errs || 'Pedido não apto para emissão fiscal.'), {
+      validation: result?.validation,
+    });
   }
-  const notaEmitida = result?.nota;
-  if (!notaEmitida?.id) throw new Error('Backend fiscal não retornou nota emitida.');
-  await logAuditoria('emissao_nf_backend', 'notas_fiscais', notaEmitida.id, null, notaEmitida);
-  return notaEmitida;
+  return result;
 }
 
-export async function cancelarNotaFiscal(id: number) {
-  const data = await backendRequest<any>(`/api/fiscal/notas/${id}/cancelar`, {
+/** @deprecated Use emitirNotaFiscal() — mantido por compatibilidade */
+export async function createNotaFiscal(nota: any, pedidoIds: number[]) {
+  return emitirNotaFiscal({
+    pedidoIds,
+    faturaId: nota?.fatura_id ?? null,
+    observacoesFiscais: nota?.observacao_fiscal || null,
+  }).then(r => r.nota);
+}
+
+export async function cancelarNotaFiscal(id: number, reason?: string) {
+  const res = await backendRequest<{ success: boolean; data: any }>(`/api/fiscal/notas/${id}/cancelar`, {
     method: 'POST',
-    body: JSON.stringify({ reason: 'Cancelamento solicitado pelo usuário' }),
+    body: JSON.stringify({ reason: reason || 'Cancelamento solicitado pelo usuário' }),
   });
-  await supabase.from('pedidos').update({
-    status_fiscal: 'nao_emitida',
-    nota_fiscal_status: 'cancelada',
-    tem_nota_fiscal: false,
-    nota_fiscal_id: null,
-  } as any).eq('nota_fiscal_id', id);
-  await logAuditoria('cancelamento_nf_backend', 'notas_fiscais', id, null, data);
-  return data;
+  return res?.data ?? res;
 }
 
 // ===== BOLETOS =====
@@ -279,7 +304,8 @@ export async function fetchBoletos(filters?: { status?: string; clienteId?: numb
   const params = new URLSearchParams();
   if (filters?.status) params.set('status', filters.status);
   if (filters?.clienteId) params.set('clienteId', String(filters.clienteId));
-  return backendRequest<any[]>(`/api/boletos${params.toString() ? `?${params.toString()}` : ''}`);
+  const data = await backendRequest<any[]>(`/api/boletos${params.toString() ? `?${params.toString()}` : ''}`);
+  return data.map(normalizeNested);
 }
 
 export async function createBoleto(boleto: any) {

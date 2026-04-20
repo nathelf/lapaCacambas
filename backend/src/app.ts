@@ -17,12 +17,22 @@ import { authRouter } from './modules/auth/auth.controller';
 import { usuariosRouter } from './modules/usuarios/usuarios.controller';
 import { relatoriosRouter } from './modules/relatorios/relatorios.controller';
 import { requireAuth } from './middlewares/auth.middleware';
+import { correlationMiddleware } from './middlewares/correlation.middleware';
 import { errorMiddleware } from './middlewares/error.middleware';
 
 export function createApp() {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: '2mb' }));
+
+  // Correlation ID — deve vir antes de qualquer rota
+  app.use(correlationMiddleware);
+
+  // Garante charset=utf-8 em todas as respostas JSON
+  app.use((_req, res, next) => {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    next();
+  });
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true, service: 'fiscal-backend' });

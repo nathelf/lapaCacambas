@@ -206,6 +206,25 @@ export const STATUS_CACAMBA_LABELS: Record<StatusCacamba, string> = {
   [StatusCacamba.INDISPONIVEL]: 'Indisponível',
 };
 
+export const STATUS_BOLETO_LABELS: Record<StatusBoleto, string> = {
+  [StatusBoleto.PENDENTE]:    'Pendente',
+  [StatusBoleto.EMITIDO]:     'Emitido',
+  [StatusBoleto.ENVIADO]:     'Enviado',
+  [StatusBoleto.VENCIDO]:     'Vencido',
+  [StatusBoleto.PAGO]:        'Pago',
+  [StatusBoleto.CANCELADO]:   'Cancelado',
+  [StatusBoleto.RENEGOCIADO]: 'Renegociado',
+};
+
+export const STATUS_FATURA_LABELS: Record<StatusFatura, string> = {
+  [StatusFatura.ABERTA]:       'Aberta',
+  [StatusFatura.PAGA]:         'Paga',
+  [StatusFatura.PAGA_PARCIAL]: 'Paga Parcial',
+  [StatusFatura.VENCIDA]:      'Vencida',
+  [StatusFatura.CANCELADA]:    'Cancelada',
+  [StatusFatura.PROTESTO]:     'Protesto',
+};
+
 export const STATUS_EXECUCAO_LABELS: Record<StatusExecucao, string> = {
   [StatusExecucao.PENDENTE]:   'Pendente',
   [StatusExecucao.EM_ROTA]:    'Em Rota',

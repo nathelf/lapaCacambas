@@ -15,13 +15,22 @@ export default function FiscalPage() {
   const [selectedPedidos, setSelectedPedidos] = useState<any[]>([]);
 
   const { data: notas = [], isLoading, refetch } = useNotasFiscais({ search: busca || undefined });
-  const { data: pedidosAptos = [] } = usePedidos({ status: undefined });
+  // limit=100: backend aceita no máximo 100 por requisição (Math.min no pedidos.service)
+  const { data: pedidosResult } = usePedidos({ limit: 100 });
+  // fetchPedidos retorna { data: PedidoDto[], total: number } — extrair array com segurança
+  const rawPedidos = pedidosResult as any;
+  const pedidosAptos: any[] = Array.isArray(rawPedidos)
+    ? rawPedidos
+    : Array.isArray(rawPedidos?.data)
+      ? rawPedidos.data
+      : [];
   const cancelarNF = useCancelarNotaFiscal();
 
   const handleEmitirViaPedidos = () => {
     // Filter pedidos aptos (concluído ou faturado, sem NF emitida)
-    const aptos = (pedidosAptos as any[]).filter(
-      (p: any) => ['concluido', 'faturado'].includes(p.status) && p.status_fiscal !== 'emitida'
+    // O backend retorna DTO camelCase: statusFiscal, valorTotal, clienteNome, clienteId
+    const aptos = pedidosAptos.filter(
+      (p: any) => ['concluido', 'faturado'].includes(p.status) && p.statusFiscal !== 'emitida'
     );
     if (aptos.length === 0) {
       toast.info('Não há pedidos aptos para emissão fiscal');
@@ -30,11 +39,11 @@ export default function FiscalPage() {
     setSelectedPedidos(aptos.map((p: any) => ({
       id: p.id,
       numero: p.numero,
-      cliente: (p as any).clientes?.nome || '—',
-      clienteId: p.cliente_id,
-      valor: Number(p.valor_total || 0),
+      cliente: p.clienteNome || '—',
+      clienteId: p.clienteId,
+      valor: Number(p.valorTotal ?? 0),
       status: p.status,
-      statusFiscal: p.status_fiscal,
+      statusFiscal: p.statusFiscal,
     })));
     setDrawerOpen(true);
   };

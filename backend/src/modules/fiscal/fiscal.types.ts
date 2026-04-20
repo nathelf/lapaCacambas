@@ -2,6 +2,7 @@ export interface FiscalValidationError {
   code: string;
   message: string;
   field?: string;
+  details?: Record<string, unknown>;
 }
 
 export interface FiscalValidationResultDTO {
@@ -44,7 +45,7 @@ export interface EmitirNotaDTO {
   pedidoIds: Array<number | string>;
   faturaId?: number | string | null;
   forcarEmissao?: boolean;
-  observacoesFiscais?: string;
+  observacoesFiscais?: string | null;
 }
 
 export interface FiscalProviderAuthDTO {
@@ -70,14 +71,27 @@ export interface FiscalProviderEmitDTO {
 export interface NotaFiscalResponseDTO {
   id: number;
   status: string;
+  numero: string | null;
   numero_nota: string | null;
   serie: string | null;
+  data_emissao: string | null;
+  valor_total: number;
+  base_calculo: number;
+  valor_iss: number;
+  codigo_servico: string | null;
+  descricao_servico: string | null;
+  observacoes_fiscais: string | null;
   chave_acesso: string | null;
   protocolo: string | null;
   xml_url: string | null;
   pdf_url: string | null;
   external_id: string | null;
   mensagem_erro: string | null;
+  ambiente: string | null;
+  tipo_documento: string;
+  cliente_id: number | null;
+  clientes: { id: number; nome: string } | null;
+  nota_fiscal_pedidos: Array<{ pedido_id: number; pedidos: { numero: string } | null }>;
   created_at: string;
 }
 

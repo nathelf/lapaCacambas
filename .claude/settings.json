@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(wc -l /e/LAPA-CACAMBAS/GIT/lapaCacambas/supabase/migrations/*.sql)",
-      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\pg_restore.exe\" --list \"E:\\\\LAPA-CACAMBAS\\\\Banco-Backup\\\\bck_23_03_2026.backup\")"
+      "Bash(\"C:\\\\Program Files\\\\PostgreSQL\\\\18\\\\bin\\\\pg_restore.exe\" --list \"E:\\\\LAPA-CACAMBAS\\\\Banco-Backup\\\\bck_23_03_2026.backup\")",
+      "Bash(npx tsc *)"
     ]
   }
 }
