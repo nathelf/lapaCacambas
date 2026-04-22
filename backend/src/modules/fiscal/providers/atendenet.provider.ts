@@ -24,6 +24,8 @@ import type {
 } from './fiscal-provider.interface';
 import { FiscalIntegrationError, FiscalAuthenticationError } from '../fiscal.errors';
 import { FISCAL_LIMITS } from '../fiscal.constants';
+import { FiscalLogger } from '../fiscal.logger';
+import { withRetry } from '../fiscal.retry';
 
 export class AtendeNetProvider implements IFiscalProvider {
 
@@ -167,31 +169,47 @@ export class AtendeNetProvider implements IFiscalProvider {
 
     const body = this.buildAtendeNetPayload(payload);
 
-    const res = await this.fetchWithTimeout(`${ctx.apiBaseUrl}/api/v1/nfse`, {
-      method:  'POST',
-      headers: {
-        ...this.bearerHeaders(ctx),
-        'X-Idempotency-Key': payload.idempotencyKey,
-      },
-      body: JSON.stringify(body),
+    FiscalLogger.info('atendenet.emitir.start', {
+      idempotencyKey: payload.idempotencyKey,
+      ambiente: ctx.ambiente,
+      valorTotal: payload.valorTotal,
+      clienteNome: payload.cliente.nome,
     });
 
-    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-    if (!res.ok) {
-      const mensagem = this.extractErrorMessage(json, res.status);
-      throw new FiscalIntegrationError(`AtendeNet: emissão falhou — ${mensagem}`, {
-        httpStatus: res.status, body: json,
-      });
-    }
+    const { res, json } = await withRetry(
+      async () => {
+        const r = await this.fetchWithTimeout(`${ctx.apiBaseUrl}/api/v1/nfse`, {
+          method:  'POST',
+          headers: { ...this.bearerHeaders(ctx), 'X-Idempotency-Key': payload.idempotencyKey },
+          body:    JSON.stringify(body),
+        });
+        const j = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!r.ok) {
+          const mensagem = this.extractErrorMessage(j, r.status);
+          throw new FiscalIntegrationError(`AtendeNet: emissão falhou — ${mensagem}`, {
+            httpStatus: r.status, body: j,
+            retryAfter: r.headers.get('retry-after'),
+          });
+        }
+        return { res: r, json: j };
+      },
+      { label: 'atendenet.emitir', correlationId: payload.idempotencyKey },
+    );
 
     const status = this.mapAtendeNetStatus(String(json.status || json.situacao || ''));
     const nfse   = (json.nfse || json) as Record<string, unknown>;
 
+    FiscalLogger.info('atendenet.emitir.success', {
+      idempotencyKey: payload.idempotencyKey,
+      http_status: res.status,
+      nota_status: status,
+      numero_nfse: nfse.numero || nfse.numeroNfse,
+    });
+
     return {
       externalId:       String(json.protocolo || json.id || payload.idempotencyKey),
       numeroNota:       String(nfse.numero || nfse.numeroNfse || ''),
-      serie:            String(nfse.serie  || body.rps && (body.rps as any).serie || '1'),
+      serie:            String(nfse.serie  || (body.rps as any)?.serie || '1'),
       status,
       ambiente:         ctx.ambiente,
       chaveAcesso:      nfse.codigoVerificacao ? String(nfse.codigoVerificacao) : undefined,
@@ -206,38 +224,42 @@ export class AtendeNetProvider implements IFiscalProvider {
 
   async consultarStatus(ctx: FiscalProviderContext, externalId: string): Promise<Record<string, unknown>> {
     if (!ctx.apiBaseUrl) throw new FiscalIntegrationError('AtendeNet: api_base_url não configurada.');
-    const res = await this.fetchWithTimeout(
-      `${ctx.apiBaseUrl}/api/v1/nfse/${encodeURIComponent(externalId)}`,
-      { headers: this.bearerHeaders(ctx) },
-    );
-    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) throw new FiscalIntegrationError(`AtendeNet: consulta retornou HTTP ${res.status}`, { json });
-    return json;
+    return withRetry(async () => {
+      const res  = await this.fetchWithTimeout(
+        `${ctx.apiBaseUrl}/api/v1/nfse/${encodeURIComponent(externalId)}`,
+        { headers: this.bearerHeaders(ctx) },
+      );
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) {
+        throw new FiscalIntegrationError(`AtendeNet: consulta retornou HTTP ${res.status}`, {
+          httpStatus: res.status, json,
+        });
+      }
+      return json;
+    }, { label: 'atendenet.consultar', correlationId: externalId });
   }
 
   async cancelar(ctx: FiscalProviderContext, input: CancelarProviderPayload): Promise<Record<string, unknown>> {
     if (!ctx.apiBaseUrl) throw new FiscalIntegrationError('AtendeNet: api_base_url não configurada.');
-
-    const res = await this.fetchWithTimeout(
-      `${ctx.apiBaseUrl}/api/v1/nfse/${encodeURIComponent(input.externalId)}/cancelar`,
-      {
-        method:  'POST',
-        headers: this.bearerHeaders(ctx),
-        body:    JSON.stringify({ motivo: input.reason }),
-      },
-    );
-
-    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-    if (!res.ok) {
-      const mensagem = this.extractErrorMessage(json, res.status);
-      // Cancelamento pode falhar por regra da prefeitura — loga mas não bloqueia
-      throw new FiscalIntegrationError(`AtendeNet: cancelamento falhou — ${mensagem}`, {
-        httpStatus: res.status, body: json,
-      });
-    }
-
-    return json;
+    return withRetry(async () => {
+      const res  = await this.fetchWithTimeout(
+        `${ctx.apiBaseUrl}/api/v1/nfse/${encodeURIComponent(input.externalId)}/cancelar`,
+        {
+          method:  'POST',
+          headers: this.bearerHeaders(ctx),
+          body:    JSON.stringify({ motivo: input.reason }),
+        },
+      );
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) {
+        const mensagem = this.extractErrorMessage(json, res.status);
+        throw new FiscalIntegrationError(`AtendeNet: cancelamento falhou — ${mensagem}`, {
+          httpStatus: res.status, body: json,
+          retryAfter: res.headers.get('retry-after'),
+        });
+      }
+      return json;
+    }, { label: 'atendenet.cancelar', correlationId: input.externalId });
   }
 
   async baixarXml(ctx: FiscalProviderContext, externalId: string): Promise<{ xmlUrl: string | null }> {

@@ -8,7 +8,10 @@ import { FiscalConfigurationError, FiscalValidationError } from './fiscal.errors
 import { assertCanTransition, mapProviderStatus } from './fiscal.status-machine';
 import type { EmitirNotaDTO } from './fiscal.types';
 import { FiscalValidationService } from './fiscal.validation.service';
+import { validateProviderPayload } from './fiscal.payload-validator';
+import { FiscalLogger } from './fiscal.logger';
 import { providerFactory } from './providers/provider.factory';
+import { env } from '../../config/env';
 
 export class FiscalService {
   constructor(
@@ -72,8 +75,9 @@ export class FiscalService {
     }
 
     // ── 4. Autenticação e provider ──────────────────────────────────────────
+    const providerNome = env.fiscal.providerOverride || config.provedor_fiscal || 'mock';
     const authResult = await this.auth.getValidAccessToken(config as Parameters<typeof this.auth.getValidAccessToken>[0]);
-    const provider = providerFactory(config.provedor_fiscal || 'mock');
+    const provider = providerFactory(providerNome);
     const providerPayload = this.mapper.mapPedidoPreviewToProviderPayload(
       preview,
       input.observacoesFiscais,
@@ -81,13 +85,29 @@ export class FiscalService {
       config as Record<string, any>,
     );
 
+    // ── 4b. Validação do schema do payload antes do envio ───────────────────
+    FiscalLogger.info('fiscal.emitir.validating_payload', {
+      idempotencyKey,
+      provider: providerNome,
+      pedidoIds,
+      correlationId,
+    });
+    validateProviderPayload(providerPayload);
+
     // ── 5. Chamada ao provider ──────────────────────────────────────────────
     const providerCtx = {
       accessToken:  authResult.accessToken,
       apiBaseUrl:   config.api_base_url || null,
-      ambiente:     config.ambiente || 'homologacao',
-      providerType: config.provedor_fiscal || 'mock',
+      ambiente:     env.fiscal.ambienteOverride || config.ambiente || 'homologacao',
+      providerType: providerNome,
     };
+
+    FiscalLogger.info('fiscal.emitir.calling_provider', {
+      idempotencyKey,
+      provider: providerNome,
+      ambiente: providerCtx.ambiente,
+      correlationId,
+    });
 
     const providerResponse = await provider.emitir(providerCtx, providerPayload);
 
@@ -109,6 +129,14 @@ export class FiscalService {
     });
 
     if (faturaId) await this.repo.updateFaturaNota(faturaId, Number(notaRow['id']));
+
+    FiscalLogger.info('fiscal.emitir.persisted', {
+      notaId: notaRow['id'],
+      numeroNota: providerResponse.numeroNota,
+      status: providerResponse.status,
+      idempotencyKey,
+      correlationId,
+    });
 
     // ── 7. Auditoria (fire-and-forget) ─────────────────────────────────────
     const statusNovo = mapProviderStatus(providerResponse.status);

@@ -2,6 +2,7 @@ import type { FiscalProviderAuthDTO } from './fiscal.types';
 import { FiscalRepository } from './fiscal.repository';
 import { FiscalProvider } from './fiscal.constants';
 import { FiscalAuthenticationError } from './fiscal.errors';
+import { env } from '../../config/env';
 
 export interface FiscalConfig {
   id: number;
@@ -29,8 +30,20 @@ export class FiscalAuthService {
 
   /**
    * Ponto de entrada único. Delega ao método correto conforme o provider.
+   * Env vars (FISCAL_*) sobrescrevem valores do banco — úteis em CI/sandbox.
    */
   async getValidAccessToken(config: FiscalConfig): Promise<FiscalProviderAuthDTO> {
+    // Merge env var overrides sobre config do banco
+    const effective: FiscalConfig = {
+      ...config,
+      focus_token:   env.fiscal.focusToken    ?? config.focus_token,
+      api_base_url:  env.fiscal.atendeNetBaseUrl ?? config.api_base_url,
+      login:         env.fiscal.atendeNetLogin ?? config.login,
+      senha:         env.fiscal.atendeNetSenha ?? config.senha,
+    };
+    // eslint-disable-next-line no-param-reassign
+    config = effective;
+
     const provider = config.provedor_fiscal?.toLowerCase() ?? '';
 
     // Focus NFe: token direto — o provider encapsula como Basic auth

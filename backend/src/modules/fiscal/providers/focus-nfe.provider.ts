@@ -22,6 +22,8 @@ import type {
 } from './fiscal-provider.interface';
 import { FiscalIntegrationError } from '../fiscal.errors';
 import { FISCAL_LIMITS, FOCUS_BASE_URLS } from '../fiscal.constants';
+import { FiscalLogger } from '../fiscal.logger';
+import { withRetry } from '../fiscal.retry';
 
 export class FocusNfeProvider implements IFiscalProvider {
 
@@ -135,27 +137,44 @@ export class FocusNfeProvider implements IFiscalProvider {
     const baseUrl = this.baseUrl(ctx);
     const ref     = payload.idempotencyKey;
     const body    = this.buildFocusPayload(payload);
+    const url     = `${baseUrl}/v2/nfse?ref=${encodeURIComponent(ref)}`;
 
-    const res = await this.fetchWithTimeout(`${baseUrl}/v2/nfse?ref=${encodeURIComponent(ref)}`, {
-      method:  'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        Authorization:   this.authHeader(ctx),
-      },
-      body: JSON.stringify(body),
+    FiscalLogger.info('focus_nfe.emitir.start', {
+      ref,
+      ambiente: ctx.ambiente,
+      valorTotal: payload.valorTotal,
+      clienteNome: payload.cliente.nome,
     });
 
-    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const { res, json } = await withRetry(
+      async () => {
+        const r = await this.fetchWithTimeout(url, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: this.authHeader(ctx) },
+          body:    JSON.stringify(body),
+        });
+        const j = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!r.ok && r.status !== 201 && r.status !== 202) {
+          const erros = (j.erros as any[])?.map((e: any) => e.mensagem).join('; ') || JSON.stringify(j);
+          throw new FiscalIntegrationError(`Focus NFe: emissão retornou HTTP ${r.status} — ${erros}`, {
+            httpStatus: r.status, body: j,
+            retryAfter: r.headers.get('retry-after'),
+          });
+        }
+        return { res: r, json: j };
+      },
+      { label: 'focus_nfe.emitir', correlationId: ref },
+    );
 
-    if (!res.ok && res.status !== 201 && res.status !== 202) {
-      const erros = (json.erros as any[])?.map((e: any) => e.mensagem).join('; ') || JSON.stringify(json);
-      throw new FiscalIntegrationError(`Focus NFe: emissão retornou HTTP ${res.status} — ${erros}`, {
-        httpStatus: res.status, body: json,
-      });
-    }
-
-    const nfse = (json.nfse || json) as Record<string, unknown>;
+    const nfse   = (json.nfse || json) as Record<string, unknown>;
     const status = this.mapFocusStatus(String(json.status || ''));
+
+    FiscalLogger.info('focus_nfe.emitir.success', {
+      ref,
+      http_status: res.status,
+      nota_status: status,
+      numero_nfse: nfse.numero_nfse || nfse.numero,
+    });
 
     return {
       externalId:       ref,
@@ -175,38 +194,39 @@ export class FocusNfeProvider implements IFiscalProvider {
 
   async consultarStatus(ctx: FiscalProviderContext, externalId: string): Promise<Record<string, unknown>> {
     const baseUrl = this.baseUrl(ctx);
-    const res = await this.fetchWithTimeout(`${baseUrl}/v2/nfse/${encodeURIComponent(externalId)}`, {
-      headers: { Authorization: this.authHeader(ctx) },
-    });
-    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) throw new FiscalIntegrationError(`Focus NFe: consulta retornou HTTP ${res.status}`, { json });
-    return json;
+    return withRetry(async () => {
+      const res  = await this.fetchWithTimeout(`${baseUrl}/v2/nfse/${encodeURIComponent(externalId)}`, {
+        headers: { Authorization: this.authHeader(ctx) },
+      });
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) {
+        throw new FiscalIntegrationError(`Focus NFe: consulta retornou HTTP ${res.status}`, {
+          httpStatus: res.status, json,
+        });
+      }
+      return json;
+    }, { label: 'focus_nfe.consultar', correlationId: externalId });
   }
 
   async cancelar(ctx: FiscalProviderContext, input: CancelarProviderPayload): Promise<Record<string, unknown>> {
     const baseUrl = this.baseUrl(ctx);
-
-    // Focus NFe cancela via DELETE com body JSON
-    const res = await this.fetchWithTimeout(`${baseUrl}/v2/nfse/${encodeURIComponent(input.externalId)}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization:  this.authHeader(ctx),
-      },
-      body: JSON.stringify({ justificativa: input.reason }),
-    });
-
-    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-    // Focus retorna 200 ou 204 em cancelamento bem-sucedido
-    if (!res.ok && res.status !== 204) {
-      const mensagem = String((json as any)?.mensagem || `HTTP ${res.status}`);
-      throw new FiscalIntegrationError(`Focus NFe: cancelamento falhou — ${mensagem}`, {
-        httpStatus: res.status, body: json,
+    return withRetry(async () => {
+      const res  = await this.fetchWithTimeout(`${baseUrl}/v2/nfse/${encodeURIComponent(input.externalId)}`, {
+        method:  'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: this.authHeader(ctx) },
+        body:    JSON.stringify({ justificativa: input.reason }),
       });
-    }
-
-    return json;
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      // Focus retorna 200 ou 204 em cancelamento bem-sucedido
+      if (!res.ok && res.status !== 204) {
+        const mensagem = String((json as any)?.mensagem || `HTTP ${res.status}`);
+        throw new FiscalIntegrationError(`Focus NFe: cancelamento falhou — ${mensagem}`, {
+          httpStatus: res.status, body: json,
+          retryAfter: res.headers.get('retry-after'),
+        });
+      }
+      return json;
+    }, { label: 'focus_nfe.cancelar', correlationId: input.externalId });
   }
 
   async baixarXml(ctx: FiscalProviderContext, externalId: string): Promise<{ xmlUrl: string | null }> {

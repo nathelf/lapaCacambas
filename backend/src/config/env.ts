@@ -14,5 +14,19 @@ export const env = {
   supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
   supabaseAnonKey: required('SUPABASE_ANON_KEY'),
   bancoWebhookSecret: process.env.BANCO_WEBHOOK_SECRET || '',
+
+  // ── Fiscal (opcionais — sobrescrevem config do banco em dev/CI) ────────────
+  fiscal: {
+    /** Sobrescreve o ambiente fiscal de qualquer config do banco (ex: forçar homologacao em staging) */
+    ambienteOverride: process.env.FISCAL_AMBIENTE_OVERRIDE || null,
+    /** Força o provider 'mock' independente da config — útil em testes automatizados */
+    providerOverride: process.env.FISCAL_PROVIDER_OVERRIDE || null,
+    /** Focus NFe: token direto (Basic auth). Sobrescreve focus_token do banco. */
+    focusToken: process.env.FISCAL_FOCUS_TOKEN || null,
+    /** AtendeNet: credenciais de sandbox. Sobrescrevem valores do banco. */
+    atendeNetBaseUrl: process.env.FISCAL_ATENDENET_BASE_URL || null,
+    atendeNetLogin: process.env.FISCAL_ATENDENET_LOGIN || null,
+    atendeNetSenha: process.env.FISCAL_ATENDENET_SENHA || null,
+  },
 };
 
