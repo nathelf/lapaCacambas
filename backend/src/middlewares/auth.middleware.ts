@@ -5,6 +5,8 @@ export type AuthenticatedUser = {
   id: string;
   email: string | null;
   roles: string[];
+  /** Permissões granulares — carregadas sob demanda */
+  permissoes?: string[];
 };
 
 declare global {

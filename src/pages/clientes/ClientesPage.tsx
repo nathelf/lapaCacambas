@@ -1,29 +1,46 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { Button } from '@/components/ui/button';
-import { Plus, Search, Eye, Loader2, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { SearchBar } from '@/components/shared/SearchBar';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { Button } from '@/components/ui/button';
+import { Plus, Eye, Loader2, Users, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useClientes } from '@/hooks/useQuery';
+import { useListFilters } from '@/hooks/useListFilters';
 import { formatDocumento, formatTelefone } from '@/lib/formatters';
+
+const LIMIT = 20;
+
+const STATUS_OPTIONS = [
+  { value: '',         label: 'Todos os status' },
+  { value: 'ativo',    label: 'Ativo' },
+  { value: 'inativo',  label: 'Inativo' },
+  { value: 'bloqueado', label: 'Bloqueado' },
+];
+
+const TIPO_OPTIONS = [
+  { value: '',   label: 'PF e PJ' },
+  { value: 'pf', label: 'Pessoa Física' },
+  { value: 'pj', label: 'Pessoa Jurídica' },
+];
 
 export default function ClientesPage() {
   const navigate = useNavigate();
-  const [busca, setBusca] = useState('');
-  const [buscaAtiva, setBuscaAtiva] = useState('');
-  const [page, setPage] = useState(1);
-  const LIMIT = 20;
 
-  const { data, isLoading } = useClientes(buscaAtiva || undefined, page);
-  const clientes = data?.data ?? [];
+  const { rawSearch, setSearch, filters, setFilter, resetFilters, page, setPage, hasActiveFilters } =
+    useListFilters<{ status?: string; tipo?: string }>();
+
+  const { data, isLoading, isFetching } = useClientes({
+    search:  filters.search,
+    status:  filters.status,
+    tipo:    filters.tipo,
+    page,
+    limit:   LIMIT,
+  });
+
+  const clientes: any[] = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / LIMIT);
-
-  const handleBusca = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPage(1);
-    setBuscaAtiva(busca.trim());
-  };
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -37,45 +54,60 @@ export default function ClientesPage() {
         }
       />
 
-      <form onSubmit={handleBusca} className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Buscar por nome, fantasia, CPF ou CNPJ..."
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            className="w-full h-9 pl-9 pr-3 rounded-md border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-        <Button type="submit" variant="outline" size="sm">
-          <Search className="w-4 h-4 mr-1" /> Buscar
-        </Button>
-        {buscaAtiva && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => { setBusca(''); setBuscaAtiva(''); setPage(1); }}>
-            Limpar
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <SearchBar
+          value={rawSearch}
+          onChange={setSearch}
+          placeholder="Buscar por nome, fantasia, CPF ou CNPJ..."
+          isLoading={isFetching && !!rawSearch}
+          className="max-w-sm"
+        />
+
+        <select
+          value={filters.status ?? ''}
+          onChange={e => setFilter('status', e.target.value || undefined)}
+          className="h-9 px-3 rounded-md border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+
+        <select
+          value={filters.tipo ?? ''}
+          onChange={e => setFilter('tipo', e.target.value || undefined)}
+          className="h-9 px-3 rounded-md border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          {TIPO_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={resetFilters} className="text-muted-foreground">
+            <X className="w-3.5 h-3.5 mr-1" /> Limpar filtros
           </Button>
         )}
-      </form>
+      </div>
 
+      {/* Conteúdo */}
       {isLoading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
-      ) : (clientes as any[]).length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">
-            {buscaAtiva ? 'Nenhum cliente encontrado para a busca.' : 'Nenhum cliente cadastrado.'}
-          </p>
-          {!buscaAtiva && (
-            <Button size="sm" variant="outline" className="mt-3" onClick={() => navigate('/clientes/novo')}>
+      ) : clientes.length === 0 ? (
+        <EmptyState
+          icon={<Users className="w-10 h-10" />}
+          message="Nenhum cliente cadastrado"
+          description="Cadastre um cliente para começar"
+          searchTerm={filters.search}
+          hasFilters={hasActiveFilters}
+          onClearFilters={hasActiveFilters ? resetFilters : undefined}
+          action={
+            <Button size="sm" onClick={() => navigate('/clientes/novo')}>
               <Plus className="w-4 h-4 mr-1" /> Cadastrar primeiro cliente
             </Button>
-          )}
-        </div>
+          }
+        />
       ) : (
-        <div className="bg-card rounded-lg border overflow-x-auto">
+        <div className={`bg-card rounded-lg border overflow-x-auto transition-opacity ${isFetching ? 'opacity-60' : ''}`}>
           <table className="data-table">
             <thead>
               <tr>
@@ -90,12 +122,8 @@ export default function ClientesPage() {
               </tr>
             </thead>
             <tbody>
-              {(clientes as any[]).map((c: any) => (
-                <tr
-                  key={c.id}
-                  className="cursor-pointer"
-                  onClick={() => navigate(`/clientes/${c.id}`)}
-                >
+              {clientes.map((c: any) => (
+                <tr key={c.id} className="cursor-pointer" onClick={() => navigate(`/clientes/${c.id}`)}>
                   <td className="font-medium">{c.nome}</td>
                   <td>{c.fantasia || '—'}</td>
                   <td>{c.tipo === 'pj' ? 'PJ' : 'PF'}</td>
@@ -119,24 +147,15 @@ export default function ClientesPage() {
         </div>
       )}
 
+      {/* Paginação */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>{total} clientes · página {page} de {totalPages}</span>
           <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page === 1}
-              onClick={() => setPage(p => p - 1)}
-            >
+            <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(page - 1)}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page === totalPages}
-              onClick={() => setPage(p => p + 1)}
-            >
+            <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(page + 1)}>
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>

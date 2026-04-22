@@ -38,11 +38,19 @@ export type FiscalOperacaoType = typeof FiscalOperacao[keyof typeof FiscalOperac
 
 // ─── Providers disponíveis ────────────────────────────────────────────────────
 export const FiscalProvider = {
-  MOCK: 'mock',
-  HTTP: 'http',
+  MOCK:       'mock',
+  HTTP:       'http',
+  FOCUS:      'focus',
+  ATENDENET:  'atendenet',
 } as const;
 
 export type FiscalProviderType = typeof FiscalProvider[keyof typeof FiscalProvider];
+
+// ─── URLs base Focus NFe ──────────────────────────────────────────────────────
+export const FOCUS_BASE_URLS = {
+  homologacao: 'https://homologacao.focusnfe.com.br',
+  producao:    'https://api.focusnfe.com.br',
+} as const;
 
 // ─── Ambientes ────────────────────────────────────────────────────────────────
 export const FiscalAmbiente = {

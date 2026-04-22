@@ -2,8 +2,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as api from '@/lib/api';
 
 // ===== CLIENTES =====
-export function useClientes(search?: string, page = 1) {
-  return useQuery({ queryKey: ['clientes', search, page], queryFn: () => api.fetchClientes(search, page) });
+export function useClientes(
+  filters?: { search?: string; status?: string; tipo?: string; page?: number; limit?: number },
+) {
+  return useQuery({
+    queryKey: ['clientes', filters],
+    queryFn:  () => api.fetchClientes(filters),
+  });
 }
 
 export function useClientesLookup(search?: string) {
@@ -40,7 +45,10 @@ export function useUpdateCliente() {
 }
 
 // ===== PEDIDOS =====
-export function usePedidos(filters?: { status?: string; clienteId?: number; search?: string; page?: number; limit?: number }) {
+export function usePedidos(filters?: {
+  status?: string; clienteId?: number; search?: string;
+  page?: number; limit?: number; dataInicio?: string; dataFim?: string;
+}) {
   return useQuery({ queryKey: ['pedidos', filters], queryFn: () => api.fetchPedidos(filters) });
 }
 
@@ -95,6 +103,27 @@ export function useCreateFatura() {
 }
 
 // ===== NOTAS FISCAIS =====
+
+export function useFiscalKpis() {
+  return useQuery({ queryKey: ['fiscal-kpis'], queryFn: api.fetchFiscalKpis, staleTime: 60_000 });
+}
+
+export function useFiscalConfig() {
+  return useQuery({ queryKey: ['fiscal-config'], queryFn: api.fetchFiscalConfig, staleTime: 300_000 });
+}
+
+export function useUpdateFiscalConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Record<string, any>) => api.updateFiscalConfig(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['fiscal-config'] }),
+  });
+}
+
+export function useTestarConexaoFiscal() {
+  return useMutation({ mutationFn: api.testarConexaoFiscal });
+}
+
 export function useNotasFiscais(filters?: { status?: string; search?: string }) {
   return useQuery({ queryKey: ['notas-fiscais', filters], queryFn: () => api.fetchNotasFiscais(filters) });
 }
@@ -175,6 +204,21 @@ export function useMotoristas() {
 
 export function useMotoristasAll() {
   return useQuery({ queryKey: ['motoristas-all'], queryFn: api.fetchMotoristasAll });
+}
+
+// ===== SESSÃO ATUAL =====
+export function useMe() {
+  return useQuery({
+    queryKey: ['me'],
+    queryFn:  () => api.backendFetch<{ user: { id: string; email: string; roles: string[]; permissoes: string[] } }>('/api/auth/me'),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useHasPermissao(codigo: string): boolean {
+  const { data } = useMe();
+  return data?.user?.permissoes?.includes(codigo) ?? false;
 }
 
 // ===== USUÁRIOS =====

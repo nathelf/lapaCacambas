@@ -3,44 +3,62 @@ import { useNavigate } from 'react-router-dom';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { StatusFiscalBadge } from '@/components/shared/StatusFiscalBadge';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { SearchBar } from '@/components/shared/SearchBar';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { EmitirNotaFiscalDrawer } from '@/components/pedidos/EmitirNotaFiscalDrawer';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Plus, Search, Filter, FileText, Eye, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, FileText, Eye, Loader2, ChevronLeft, ChevronRight, SlidersHorizontal, X, ListOrdered } from 'lucide-react';
 import { usePedidos } from '@/hooks/useQuery';
+import { useListFilters } from '@/hooks/useListFilters';
 import { toast } from 'sonner';
 
 const LIMIT = 20;
+
+const STATUS_OPTIONS = [
+  { value: '',                      label: 'Todos os status' },
+  { value: 'orcamento',             label: 'Orçamento' },
+  { value: 'aguardando_aprovacao',  label: 'Aguardando aprovação' },
+  { value: 'aprovado',              label: 'Aprovado' },
+  { value: 'pendente_programacao',  label: 'Pend. programação' },
+  { value: 'programado',            label: 'Programado' },
+  { value: 'em_rota',               label: 'Em rota' },
+  { value: 'em_execucao',           label: 'Em execução' },
+  { value: 'concluido',             label: 'Concluído' },
+  { value: 'faturado',              label: 'Faturado' },
+  { value: 'cancelado',             label: 'Cancelado' },
+];
 
 export default function PedidosPage() {
   const navigate = useNavigate();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [busca, setBusca] = useState('');
-  const [buscaAtiva, setBuscaAtiva] = useState('');
-  const [page, setPage] = useState(1);
+  const [showDateFilters, setShowDateFilters] = useState(false);
 
-  const { data: result, isLoading, refetch } = usePedidos({ search: buscaAtiva || undefined, page });
+  const { rawSearch, setSearch, filters, setFilter, resetFilters, page, setPage, hasActiveFilters } =
+    useListFilters<{ status?: string; dataInicio?: string; dataFim?: string }>();
+
+  const { data: result, isLoading, isFetching, refetch } = usePedidos({
+    search:     filters.search,
+    status:     filters.status,
+    dataInicio: filters.dataInicio,
+    dataFim:    filters.dataFim,
+    page,
+    limit: LIMIT,
+  });
+
   const pedidos: any[] = result?.data ?? [];
   const total = result?.total ?? 0;
   const totalPages = Math.ceil(total / LIMIT);
 
   const allSelected = pedidos.length > 0 && pedidos.every((p: any) => selectedIds.has(p.id));
-
-  const toggleAll = () => {
-    if (allSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(pedidos.map((p: any) => p.id)));
-    }
-  };
-
+  const toggleAll = () =>
+    allSelected ? setSelectedIds(new Set()) : setSelectedIds(new Set(pedidos.map((p: any) => p.id)));
   const toggleOne = (id: number) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
   };
@@ -48,32 +66,15 @@ export default function PedidosPage() {
   const selectedPedidos = pedidos.filter((p: any) => selectedIds.has(p.id));
 
   const handleEmitirLote = () => {
-    if (selectedPedidos.length === 0) {
-      toast.error('Selecione pelo menos um pedido');
-      return;
-    }
+    if (selectedPedidos.length === 0) { toast.error('Selecione pelo menos um pedido'); return; }
     setDrawerOpen(true);
   };
 
   const handleEmitirIndividual = (pedido: any, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (pedido.statusFiscal === 'emitida') {
-      toast.info('Nota já emitida para este pedido');
-      return;
-    }
+    if (pedido.statusFiscal === 'emitida') { toast.info('Nota já emitida para este pedido'); return; }
     setSelectedIds(new Set([pedido.id]));
     setDrawerOpen(true);
-  };
-
-  const handleEmitido = () => {
-    setSelectedIds(new Set());
-    refetch();
-  };
-
-  const handleBusca = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPage(1);
-    setBuscaAtiva(busca.trim());
   };
 
   return (
@@ -95,39 +96,95 @@ export default function PedidosPage() {
         }
       />
 
-      <form onSubmit={handleBusca} className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Buscar pedido..."
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            className="w-full h-9 pl-9 pr-3 rounded-md border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+      {/* Toolbar de busca e filtros */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <SearchBar
+            value={rawSearch}
+            onChange={setSearch}
+            placeholder="Buscar por número, cliente ou observação..."
+            isLoading={isFetching && !!rawSearch}
+            className="max-w-sm"
           />
-        </div>
-        <Button type="submit" variant="outline" size="sm">
-          <Search className="w-4 h-4 mr-1" /> Buscar
-        </Button>
-        {buscaAtiva && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => { setBusca(''); setBuscaAtiva(''); setPage(1); }}>
-            Limpar
-          </Button>
-        )}
-        <Button type="button" variant="outline" size="sm"><Filter className="w-4 h-4 mr-1" /> Filtros</Button>
-      </form>
 
-      {isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-      ) : pedidos.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <p className="text-sm">Nenhum pedido encontrado</p>
-          <Button size="sm" className="mt-3" onClick={() => navigate('/pedidos/novo')}>
-            <Plus className="w-4 h-4 mr-1" /> Criar primeiro pedido
+          <select
+            value={filters.status ?? ''}
+            onChange={e => setFilter('status', e.target.value || undefined)}
+            className="h-9 px-3 rounded-md border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowDateFilters(s => !s)}
+            className={showDateFilters ? 'border-primary text-primary' : ''}
+          >
+            <SlidersHorizontal className="w-4 h-4 mr-1" />
+            Período
+            {(filters.dataInicio || filters.dataFim) && (
+              <span className="ml-1.5 w-2 h-2 rounded-full bg-primary" />
+            )}
           </Button>
+
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={resetFilters} className="text-muted-foreground">
+              <X className="w-3.5 h-3.5 mr-1" /> Limpar filtros
+            </Button>
+          )}
         </div>
+
+        {showDateFilters && (
+          <div className="flex flex-wrap items-center gap-3 p-3 bg-muted/40 rounded-lg border">
+            <div className="flex items-center gap-2 text-sm">
+              <label className="text-muted-foreground font-medium">De:</label>
+              <input
+                type="date"
+                value={filters.dataInicio ?? ''}
+                onChange={e => setFilter('dataInicio', e.target.value || undefined)}
+                className="h-8 px-2 rounded border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <label className="text-muted-foreground font-medium">Até:</label>
+              <input
+                type="date"
+                value={filters.dataFim ?? ''}
+                onChange={e => setFilter('dataFim', e.target.value || undefined)}
+                className="h-8 px-2 rounded border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            {(filters.dataInicio || filters.dataFim) && (
+              <Button variant="ghost" size="sm" onClick={() => { setFilter('dataInicio', undefined); setFilter('dataFim', undefined); }}>
+                <X className="w-3.5 h-3.5 mr-1" /> Limpar datas
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Tabela */}
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : pedidos.length === 0 ? (
+        <EmptyState
+          icon={<ListOrdered className="w-10 h-10" />}
+          message="Nenhum pedido encontrado"
+          description="Crie um pedido para começar"
+          searchTerm={filters.search}
+          hasFilters={hasActiveFilters}
+          onClearFilters={hasActiveFilters ? resetFilters : undefined}
+          action={
+            <Button size="sm" onClick={() => navigate('/pedidos/novo')}>
+              <Plus className="w-4 h-4 mr-1" /> Criar primeiro pedido
+            </Button>
+          }
+        />
       ) : (
-        <div className="bg-card rounded-lg border overflow-x-auto">
+        <div className={`bg-card rounded-lg border overflow-x-auto transition-opacity ${isFetching ? 'opacity-60' : ''}`}>
           <TooltipProvider>
             <table className="data-table">
               <thead>
@@ -160,22 +217,24 @@ export default function PedidosPage() {
                     <td>{p.clienteNome || '—'}</td>
                     <td className="text-xs">{p.tipo?.replace(/_/g, ' ')}</td>
                     <td><StatusBadge status={p.status} /></td>
-                    <td>
-                      <StatusFiscalBadge status={p.statusFiscal} />
+                    <td><StatusFiscalBadge status={p.statusFiscal} /></td>
+                    <td className="text-right tabular-nums">
+                      R$ {Number(p.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="text-right tabular-nums">R$ {Number(p.valorTotal || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                     <td onClick={e => e.stopPropagation()}>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
-                            onClick={(e) => handleEmitirIndividual(p, e)}
+                            onClick={e => handleEmitirIndividual(p, e)}
                             className={`p-1.5 rounded-md transition-colors ${
                               p.statusFiscal === 'emitida'
                                 ? 'text-[hsl(var(--success))] hover:bg-[hsl(var(--success))]/10'
                                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                             }`}
                           >
-                            {p.statusFiscal === 'emitida' ? <Eye className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                            {p.statusFiscal === 'emitida'
+                              ? <Eye className="w-4 h-4" />
+                              : <FileText className="w-4 h-4" />}
                           </button>
                         </TooltipTrigger>
                         <TooltipContent>
@@ -191,14 +250,15 @@ export default function PedidosPage() {
         </div>
       )}
 
+      {/* Paginação */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>{total} pedidos · página {page} de {totalPages}</span>
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+            <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(page - 1)}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
+            <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(page + 1)}>
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
@@ -209,15 +269,11 @@ export default function PedidosPage() {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         pedidos={selectedPedidos.map((p: any) => ({
-          id: p.id,
-          numero: p.numero,
-          cliente: p.clienteNome || '—',
-          clienteId: p.clienteId,
-          valor: Number(p.valorTotal || 0),
-          status: p.status,
-          statusFiscal: p.statusFiscal,
+          id: p.id, numero: p.numero,
+          cliente: p.clienteNome || '—', clienteId: p.clienteId,
+          valor: Number(p.valorTotal || 0), status: p.status, statusFiscal: p.statusFiscal,
         }))}
-        onEmitido={handleEmitido}
+        onEmitido={() => { setSelectedIds(new Set()); refetch(); }}
       />
     </div>
   );

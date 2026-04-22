@@ -9,6 +9,8 @@ export interface FiscalProviderContext {
   accessToken: string;
   apiBaseUrl: string | null;
   ambiente: string;
+  /** Tipo do provider — cada implementação usa para adaptar auth headers */
+  providerType?: string;
 }
 
 // ─── Payload de emissão (normalizado — independente de provider) ──────────────
@@ -22,8 +24,14 @@ export interface EmitirProviderPayload {
     email: string | null;
     telefone: string | null;
     endereco?: string | null;
+    numero?: string | null;
+    bairro?: string | null;
     municipio?: string | null;
+    uf?: string | null;
     cep?: string | null;
+    /** Tomador estrangeiro */
+    idEstrangeiro?: string | null;
+    pais?: string | null;
   };
   itens: Array<{
     descricao: string;
@@ -38,6 +46,33 @@ export interface EmitirProviderPayload {
   observacoesFiscais: string | null;
   referenciaPedidos: string[];
   referenciaFaturaId: number | null;
+  /** Dados do prestador (empresa emissora) */
+  prestador?: {
+    cnpj: string | null;
+    inscricaoMunicipal: string | null;
+    codigoMunicipio: string | null;
+    razaoSocial?: string | null;
+  };
+  /** Configuração tributária do tenant */
+  config?: {
+    serieRps?: string | null;
+    itemListaServico?: string | null;
+    aliquotaIss?: number | null;
+    naturezaOperacao?: number | null;
+    regimeTributario?: number | null;
+    codigoMunicipio?: string | null;
+  };
+  /** Reforma Tributária 2026+ — controlado por configuração */
+  reformaTributaria?: {
+    cbsHabilitado: boolean;
+    ibsHabilitado: boolean;
+    cbsValor?: number;
+    cbsAliquota?: number;
+    ibsMunValor?: number;
+    ibsUfValor?: number;
+    ibsCbsBaseCalculo?: number;
+    ibsCbsSituacaoTributaria?: string;
+  };
 }
 
 // ─── Resposta da emissão (normalizada) ───────────────────────────────────────

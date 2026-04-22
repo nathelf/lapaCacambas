@@ -6,29 +6,63 @@ export class FiscalMapper {
     preview: FiscalPreviewDTO,
     observacoesFiscais?: string | null,
     idempotencyKey?: string,
+    configFiscal?: Record<string, any> | null,
   ): EmitirProviderPayload {
+    const aliquota = configFiscal?.aliquota_iss ?? preview.servico?.aliquota;
+
     return {
       idempotencyKey: idempotencyKey ?? '',
       ambiente: preview.ambiente,
       cliente: {
-        nome: preview.cliente.nome,
-        documento: preview.cliente.documento,
-        tipo: preview.cliente.tipo,
-        email: preview.cliente.email,
-        telefone: preview.cliente.telefone,
+        nome:       preview.cliente.nome,
+        documento:  preview.cliente.documento,
+        tipo:       preview.cliente.tipo,
+        email:      preview.cliente.email,
+        telefone:   preview.cliente.telefone,
+        endereco:   preview.cliente.endereco    ?? null,
+        numero:     preview.cliente.numero      ?? null,
+        bairro:     preview.cliente.bairro      ?? null,
+        municipio:  preview.cliente.municipio   ?? configFiscal?.codigo_municipio ?? null,
+        uf:         preview.cliente.uf          ?? null,
+        cep:        preview.cliente.cep         ?? null,
+        idEstrangeiro: preview.cliente.idEstrangeiro ?? null,
+        pais:          preview.cliente.pais          ?? null,
       },
       itens: preview.pedidos.map((p) => ({
-        descricao: preview.servico?.descricao || `Pedido ${p.numero}`,
-        quantidade: 1,
-        valorUnitario: p.valor,
-        codigoServicoMunicipal: preview.servico?.codigo_fiscal || null,
+        descricao:              preview.servico?.descricao || `Pedido ${p.numero}`,
+        quantidade:             1,
+        valorUnitario:          p.valor,
+        codigoServicoMunicipal: configFiscal?.item_lista_servico
+                                  || preview.servico?.codigo_fiscal
+                                  || null,
       })),
-      valorTotal: preview.valorTotal,
-      codigoServico: preview.servico?.codigo_fiscal || null,
-      aliquotaIss: preview.servico?.aliquota,
-      observacoesFiscais: observacoesFiscais ?? null,
-      referenciaPedidos: preview.pedidos.map((p) => p.numero),
-      referenciaFaturaId: preview.faturaId,
+      valorTotal:          preview.valorTotal,
+      codigoServico:       configFiscal?.item_lista_servico || preview.servico?.codigo_fiscal || null,
+      aliquotaIss:         aliquota,
+      observacoesFiscais:  observacoesFiscais ?? null,
+      referenciaPedidos:   preview.pedidos.map((p) => p.numero),
+      referenciaFaturaId:  preview.faturaId,
+      // Dados do prestador (empresa emissora) extraídos da configuração
+      prestador: configFiscal ? {
+        cnpj:               configFiscal.cnpj                ?? null,
+        inscricaoMunicipal: configFiscal.inscricao_municipal  ?? null,
+        codigoMunicipio:    (configFiscal.codigo_municipio || configFiscal.municipio_codigo) ?? null,
+        razaoSocial:        configFiscal.razao_social          ?? null,
+      } : undefined,
+      // Config tributária do tenant
+      config: configFiscal ? {
+        serieRps:          configFiscal.serie_rps           ?? '1',
+        itemListaServico:  configFiscal.item_lista_servico   ?? null,
+        aliquotaIss:       configFiscal.aliquota_iss         ?? aliquota ?? null,
+        naturezaOperacao:  configFiscal.natureza_operacao    ?? 1,
+        regimeTributario:  configFiscal.regime_tributario_cod ?? 1,
+        codigoMunicipio:   (configFiscal.codigo_municipio || configFiscal.municipio_codigo) ?? null,
+      } : undefined,
+      // Reforma Tributária 2026+ — somente quando habilitado na config
+      reformaTributaria: (configFiscal?.cbs_habilitado || configFiscal?.ibs_habilitado) ? {
+        cbsHabilitado: Boolean(configFiscal.cbs_habilitado),
+        ibsHabilitado: Boolean(configFiscal.ibs_habilitado),
+      } : undefined,
     };
   }
 

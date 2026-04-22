@@ -1,14 +1,30 @@
+import { useState, useMemo } from 'react';
 import { ModulePage } from '@/components/shared/ModulePage';
 import { StatusBadge } from '@/components/shared/StatusBadge';
+import { SearchBar } from '@/components/shared/SearchBar';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { STATUS_CACAMBA_LABELS } from '@/types/enums';
 import { Loader2, Container } from 'lucide-react';
 import { useCacambas, useUnidadesCacamba } from '@/hooks/useQuery';
 
 export default function CacambasPage() {
+  const [search, setSearch] = useState('');
+
   const { data: cacambas = [], isLoading: loadingCacambas } = useCacambas();
   const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesCacamba();
 
   const isLoading = loadingCacambas || loadingUnidades;
+
+  const unidadesFiltradas = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return unidades as any[];
+    return (unidades as any[]).filter(u =>
+      u.patrimonio?.toLowerCase().includes(term) ||
+      u.cacamba?.descricao?.toLowerCase().includes(term) ||
+      u.clienteAtual?.toLowerCase().includes(term) ||
+      u.observacao?.toLowerCase().includes(term)
+    );
+  }, [unidades, search]);
 
   if (isLoading) {
     return (
@@ -70,14 +86,25 @@ export default function CacambasPage() {
 
       {/* Unidades / Patrimônio */}
       <div className="bg-card rounded-lg border">
-        <div className="px-4 py-3 border-b flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Patrimônio / Unidades</h3>
-          <span className="text-xs text-muted-foreground">{(unidades as any[]).length} unidades</span>
+        <div className="px-4 py-3 border-b flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold shrink-0">Patrimônio / Unidades</h3>
+          <SearchBar
+            value={search}
+            onChange={setSearch}
+            placeholder="Buscar por patrimônio, tipo ou cliente..."
+            className="max-w-xs"
+          />
+          <span className="text-xs text-muted-foreground shrink-0">
+            {unidadesFiltradas.length} / {(unidades as any[]).length} unidades
+          </span>
         </div>
-        {(unidades as any[]).length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <p className="text-sm">Nenhuma unidade cadastrada.</p>
-          </div>
+        {unidadesFiltradas.length === 0 ? (
+          <EmptyState
+            icon={<Container className="w-10 h-10" />}
+            message="Nenhuma unidade cadastrada"
+            searchTerm={search}
+            onClearFilters={search ? () => setSearch('') : undefined}
+          />
         ) : (
           <table className="data-table">
             <thead>
@@ -90,7 +117,7 @@ export default function CacambasPage() {
               </tr>
             </thead>
             <tbody>
-              {(unidades as any[]).map((u: any) => (
+              {unidadesFiltradas.map((u: any) => (
                 <tr key={u.id}>
                   <td className="font-mono text-xs font-medium">{u.patrimonio}</td>
                   <td>{u.cacamba?.descricao || '—'}</td>

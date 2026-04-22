@@ -51,9 +51,9 @@ export function createApp() {
   app.use('/api/contatos', requireAuth(['administrador', 'atendimento', 'gestor', 'fiscal']), contatosRouter);
   app.use('/api/servicos', requireAuth(['administrador', 'atendimento', 'gestor', 'fiscal']), servicosRouter);
   app.use('/api/pedidos', requireAuth(['administrador', 'atendimento', 'gestor', 'fiscal', 'operador']), pedidosRouter);
-  app.use('/api/usuarios', requireAuth(['administrador']), usuariosRouter);
+  app.use('/api/usuarios', requireAuth([]), usuariosRouter);
   app.use('/api/relatorios', requireAuth(['administrador', 'financeiro', 'fiscal', 'gestor', 'atendimento']), relatoriosRouter);
-  app.use('/api/logistica', requireAuth(['administrador', 'gestor', 'operador']), logisticaRouter);
+  app.use('/api/logistica', requireAuth(['administrador', 'gestor', 'operador', 'atendimento']), logisticaRouter);
   app.use('/api/fiscal', requireAuth(['administrador', 'fiscal', 'gestor', 'atendimento']), fiscalRouter);
   app.use('/api', webhookRouter);
   app.use('/api', requireAuth(['administrador', 'financeiro', 'fiscal', 'gestor', 'atendimento']), financeiroRouter);

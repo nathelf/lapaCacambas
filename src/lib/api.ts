@@ -18,6 +18,11 @@ function normalizeNested(record: any): any {
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3333';
 
+/** Versão pública de backendRequest — para uso em hooks externos */
+export async function backendFetch<T = any>(path: string, init?: RequestInit): Promise<T> {
+  return backendRequest<T>(path, init);
+}
+
 async function backendRequest<T = any>(path: string, init?: RequestInit): Promise<T> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) throw new Error('Sessão inválida para chamada ao backend.');
@@ -54,9 +59,16 @@ export async function logAuditoria(acao: string, entidade: string, entidadeId?: 
 }
 
 // ===== CLIENTES =====
-export async function fetchClientes(search?: string, page = 1, limit = 20) {
-  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
-  if (search) params.set('busca', search);
+export async function fetchClientes(
+  filters?: { search?: string; status?: string; tipo?: string; page?: number; limit?: number },
+) {
+  const params = new URLSearchParams({
+    page:  String(filters?.page  ?? 1),
+    limit: String(filters?.limit ?? 20),
+  });
+  if (filters?.search) params.set('busca',  filters.search);
+  if (filters?.status) params.set('status', filters.status);
+  if (filters?.tipo)   params.set('tipo',   filters.tipo);
   const result = await backendRequest<{ data: any[]; total: number }>(`/api/clientes?${params}`);
   return { ...result, data: result.data.map(normalizeCliente) };
 }
@@ -177,14 +189,17 @@ export async function fetchPedidos(filters?: {
   clienteId?: number;
   search?: string;
   page?: number;
-  /** Quantidade de registros por página. Padrão: 20. Máximo aceito pelo backend: 100. */
   limit?: number;
+  dataInicio?: string;
+  dataFim?: string;
 }) {
   const params = new URLSearchParams({ limit: String(filters?.limit ?? 20) });
-  if (filters?.status)    params.set('status', filters.status);
-  if (filters?.clienteId) params.set('clienteId', String(filters.clienteId));
-  if (filters?.search)    params.set('busca', filters.search);
-  if (filters?.page)      params.set('page', String(filters.page));
+  if (filters?.status)     params.set('status',     filters.status);
+  if (filters?.clienteId)  params.set('clienteId',  String(filters.clienteId));
+  if (filters?.search)     params.set('busca',       filters.search);
+  if (filters?.page)       params.set('page',        String(filters.page));
+  if (filters?.dataInicio) params.set('dataInicio',  filters.dataInicio);
+  if (filters?.dataFim)    params.set('dataFim',     filters.dataFim);
   const result = await backendRequest<{ data: any[]; total: number }>(`/api/pedidos?${params}`);
   return { ...result, data: result.data.map(normalizeNested) };
 }
@@ -259,6 +274,32 @@ export async function createFatura(fatura: any, pedidoIds: number[]) {
 }
 
 // ===== NOTAS FISCAIS =====
+
+export async function fetchFiscalKpis() {
+  const res = await backendRequest<{ success: boolean; data: any }>('/api/fiscal/kpis');
+  return res?.data ?? res;
+}
+
+export async function fetchFiscalConfig() {
+  const res = await backendRequest<{ success: boolean; data: any }>('/api/fiscal/configuracoes');
+  return res?.data ?? res;
+}
+
+export async function updateFiscalConfig(body: Record<string, any>) {
+  const res = await backendRequest<{ success: boolean; data: any }>('/api/fiscal/configuracoes', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+  return res?.data ?? res;
+}
+
+export async function testarConexaoFiscal() {
+  const res = await backendRequest<{ success: boolean; data: any }>('/api/fiscal/testar-conexao', {
+    method: 'POST',
+  });
+  return res?.data ?? res;
+}
+
 // Listagem via backend (mesmo contexto de emissão/cancelamento — dados sempre consistentes)
 export async function fetchNotasFiscais(filters?: { status?: string; search?: string }) {
   const params = new URLSearchParams({ limit: '100' });

@@ -53,7 +53,8 @@ export async function listar(query: ListClientesQuery): Promise<{ data: ClienteD
     .range(offset, offset + limit - 1);
 
   if (query.busca) {
-    q = q.or(`nome.ilike.%${query.busca}%,fantasia.ilike.%${query.busca}%,cpf.ilike.%${query.busca}%,cnpj.ilike.%${query.busca}%`);
+    const term = query.busca.trim();
+    q = q.or(`nome.ilike.%${term}%,fantasia.ilike.%${term}%,cpf.ilike.%${term}%,cnpj.ilike.%${term}%`);
   }
   if (query.status) {
     q = q.eq('status', query.status);

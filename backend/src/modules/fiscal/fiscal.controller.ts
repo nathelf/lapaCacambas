@@ -166,3 +166,43 @@ fiscalRouter.get('/notas/:id/pdf', async (req, res, next) => {
     next(error);
   }
 });
+
+// ─── GET /kpis ────────────────────────────────────────────────────────────────
+fiscalRouter.get('/kpis', async (_req, res, next) => {
+  try {
+    const data = await service.getKpis();
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── GET /configuracoes ───────────────────────────────────────────────────────
+fiscalRouter.get('/configuracoes', async (_req, res, next) => {
+  try {
+    const data = await service.getConfiguracoes();
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── PUT /configuracoes ───────────────────────────────────────────────────────
+fiscalRouter.put('/configuracoes', async (req, res, next) => {
+  try {
+    const data = await service.updateConfiguracoes(req.body);
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── POST /testar-conexao ─────────────────────────────────────────────────────
+fiscalRouter.post('/testar-conexao', async (_req, res, next) => {
+  try {
+    const data = await service.testarConexao();
+    res.json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+});

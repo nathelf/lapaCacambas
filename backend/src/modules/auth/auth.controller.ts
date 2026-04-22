@@ -40,7 +40,13 @@ authRouter.post('/logout', requireAuth(), async (req: Request, res: Response, ne
 });
 
 // GET /auth/me
-// Devolve os dados do usuário logado — útil para o frontend saber os roles e montar o menu
-authRouter.get('/me', requireAuth(), (req: Request, res: Response) => {
-  res.json({ user: req.user });
+// Devolve dados do usuário logado + permissões granulares
+authRouter.get('/me', requireAuth(), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { loadUserPermissoes } = await import('../../middlewares/permission.middleware');
+    const permissoes = await loadUserPermissoes(req.user!.id, req.user!.roles);
+    res.json({ user: { ...req.user, permissoes } });
+  } catch (err) {
+    next(err);
+  }
 });

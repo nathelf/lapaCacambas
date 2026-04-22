@@ -247,4 +247,52 @@ export class FiscalRepository {
     if (error) throw error;
     return data ?? [];
   }
+
+  async getKpis() {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    const [{ data: notasMes }, { data: todasNotas }] = await Promise.all([
+      supabaseAdmin
+        .from('notas_fiscais')
+        .select('status, valor_total')
+        .gte('created_at', startOfMonth)
+        .is('deleted_at', null),
+      supabaseAdmin
+        .from('notas_fiscais')
+        .select('status')
+        .is('deleted_at', null),
+    ]);
+
+    const mes   = notasMes   ?? [];
+    const todas = todasNotas ?? [];
+
+    const emitidas      = mes.length;
+    const valorMes      = mes.reduce((s, n) => s + Number(n.valor_total || 0), 0);
+    const autorizadas   = todas.filter(n => n.status === 'emitida').length;
+    const pendentes     = todas.filter(n => ['pendente', 'processando'].includes(n.status)).length;
+    const rejeitadas    = todas.filter(n => ['erro', 'cancelada'].includes(n.status)).length;
+    const total         = todas.length;
+
+    return {
+      emitidas,
+      valorMes,
+      autorizadas,
+      autorizadas_pct: total > 0 ? Math.round((autorizadas / total) * 100) : 0,
+      pendentes,
+      rejeitadas,
+      total,
+    };
+  }
+
+  async updateConfiguracaoFiscal(id: number, fields: Record<string, any>) {
+    const { data, error } = await supabaseAdmin
+      .from('configuracoes_fiscais_empresa')
+      .update({ ...fields, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
 }

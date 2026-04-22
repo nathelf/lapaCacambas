@@ -12,6 +12,7 @@ import {
   useUpdateUsuario,
   usePatchUsuarioStatus,
   useDeleteUsuario,
+  useHasPermissao,
 } from '@/hooks/useQuery';
 import { AppRole, APP_ROLE_LABELS } from '../../../shared/enums';
 import { toast } from 'sonner';
@@ -45,6 +46,11 @@ export default function UsuariosPage() {
   const updateUsuario = useUpdateUsuario();
   const patchStatus = usePatchUsuarioStatus();
   const deleteUsuario = useDeleteUsuario();
+
+  const podeCriar         = useHasPermissao('usuarios.criar');
+  const podeEditar        = useHasPermissao('usuarios.editar');
+  const podeAlterarStatus = useHasPermissao('usuarios.alterar_status');
+  const podeDeletar       = useHasPermissao('usuarios.deletar');
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -155,11 +161,11 @@ export default function UsuariosPage() {
       <PageHeader
         title="Usuários"
         subtitle="Gestão de usuários, perfis e permissões"
-        actions={
+        actions={podeCriar ? (
           <Button size="sm" onClick={abrirNovo}>
             <Plus className="w-4 h-4 mr-1" /> Novo Usuário
           </Button>
-        }
+        ) : undefined}
       />
 
       {isLoading ? (
@@ -218,29 +224,35 @@ export default function UsuariosPage() {
                   </td>
                   <td>
                     <div className="flex items-center gap-1">
-                      <Button size="sm" variant="ghost" title="Editar" onClick={() => abrirEditar(u)}>
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        title={u.ativo ? 'Desativar' : 'Ativar'}
-                        disabled={patchStatus.isPending}
-                        onClick={() => handleToggleStatus(u)}
-                      >
-                        {u.ativo
-                          ? <ToggleRight className="w-4 h-4 text-green-500" />
-                          : <ToggleLeft className="w-4 h-4 text-muted-foreground" />
-                        }
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        title="Remover"
-                        onClick={() => setDeleteConfirmId(u.id)}
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
+                      {podeEditar && (
+                        <Button size="sm" variant="ghost" title="Editar" onClick={() => abrirEditar(u)}>
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {podeAlterarStatus && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title={u.ativo ? 'Desativar' : 'Ativar'}
+                          disabled={patchStatus.isPending}
+                          onClick={() => handleToggleStatus(u)}
+                        >
+                          {u.ativo
+                            ? <ToggleRight className="w-4 h-4 text-green-500" />
+                            : <ToggleLeft className="w-4 h-4 text-muted-foreground" />
+                          }
+                        </Button>
+                      )}
+                      {podeDeletar && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Remover"
+                          onClick={() => setDeleteConfirmId(u.id)}
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>

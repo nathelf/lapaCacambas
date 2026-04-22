@@ -93,7 +93,17 @@ export async function listar(query: ListPedidosQuery): Promise<{ data: PedidoDto
   if (query.dataInicio) q = q.gte('data_pedido', query.dataInicio);
   if (query.dataFim)    q = q.lte('data_pedido', query.dataFim);
   if (query.busca) {
-    q = q.or(`numero.ilike.%${query.busca}%,observacao.ilike.%${query.busca}%`);
+    const term = query.busca.trim();
+    // Busca também pelo nome do cliente (two-step: encontrar IDs primeiro)
+    const { data: matchClientes } = await supabaseAdmin
+      .from('clientes')
+      .select('id')
+      .or(`nome.ilike.%${term}%,fantasia.ilike.%${term}%`)
+      .is('deleted_at', null)
+      .limit(200);
+    const ids = (matchClientes ?? []).map((c: any) => c.id);
+    const idFilter = ids.length > 0 ? `,cliente_id.in.(${ids.join(',')})` : '';
+    q = q.or(`numero.ilike.%${term}%,observacao.ilike.%${term}%${idFilter}`);
   }
 
   const { data, error, count } = await q;

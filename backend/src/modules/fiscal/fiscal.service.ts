@@ -78,13 +78,15 @@ export class FiscalService {
       preview,
       input.observacoesFiscais,
       idempotencyKey,
+      config as Record<string, any>,
     );
 
     // ── 5. Chamada ao provider ──────────────────────────────────────────────
     const providerCtx = {
-      accessToken: authResult.accessToken,
-      apiBaseUrl: config.api_base_url || null,
-      ambiente: config.ambiente || 'homologacao',
+      accessToken:  authResult.accessToken,
+      apiBaseUrl:   config.api_base_url || null,
+      ambiente:     config.ambiente || 'homologacao',
+      providerType: config.provedor_fiscal || 'mock',
     };
 
     const providerResponse = await provider.emitir(providerCtx, providerPayload);
@@ -172,9 +174,10 @@ export class FiscalService {
 
     const providerStatus = await provider.consultarStatus(
       {
-        accessToken: authResult.accessToken,
-        apiBaseUrl: config.api_base_url || null,
-        ambiente: config.ambiente || 'homologacao',
+        accessToken:  authResult.accessToken,
+        apiBaseUrl:   config.api_base_url || null,
+        ambiente:     config.ambiente || 'homologacao',
+        providerType: config.provedor_fiscal || 'mock',
       },
       externalId,
     );
@@ -215,9 +218,10 @@ export class FiscalService {
 
     const providerResp = await provider.cancelar(
       {
-        accessToken: authResult.accessToken,
-        apiBaseUrl: config.api_base_url || null,
-        ambiente: config.ambiente || 'homologacao',
+        accessToken:  authResult.accessToken,
+        apiBaseUrl:   config.api_base_url || null,
+        ambiente:     config.ambiente || 'homologacao',
+        providerType: config.provedor_fiscal || 'mock',
       },
       { externalId, reason },
     );
@@ -281,5 +285,68 @@ export class FiscalService {
       externalId,
     );
     return result.pdfUrl;
+  }
+
+  async getKpis() {
+    return this.repo.getKpis();
+  }
+
+  async getConfiguracoes() {
+    const config = await this.repo.getConfiguracaoFiscalAtiva(null);
+    if (!config) return null;
+    const mask = (v: any) => (v ? '••••' + String(v).slice(-4) : null);
+    return {
+      ...config,
+      api_key:                  mask(config.api_key),
+      client_secret:            config.client_secret            ? '••••••••' : null,
+      certificate_password_ref: config.certificate_password_ref ? '••••••••' : null,
+      focus_token:              mask((config as any).focus_token),
+      senha:                    (config as any).senha            ? '••••••••' : null,
+      token_atual:              undefined,
+    };
+  }
+
+  async updateConfiguracoes(body: Record<string, any>) {
+    const config = await this.repo.getConfiguracaoFiscalAtiva(null);
+    if (!config) throw new FiscalConfigurationError('Configuração fiscal não encontrada.');
+
+    const isMasked = (v: any) => typeof v === 'string' && v.includes('••••');
+    const safe = (v: any, fallback: any) => (isMasked(v) || v === undefined ? fallback : v || null);
+
+    const fields: Record<string, any> = {};
+    if (body.provedor_fiscal      !== undefined) fields.provedor_fiscal      = body.provedor_fiscal;
+    if (body.ambiente             !== undefined) fields.ambiente             = body.ambiente;
+    if (body.api_base_url         !== undefined) fields.api_base_url         = body.api_base_url || null;
+    if (body.client_id            !== undefined) fields.client_id            = body.client_id    || null;
+    if (body.inscricao_municipal  !== undefined) fields.inscricao_municipal  = body.inscricao_municipal || null;
+    if (body.municipio_codigo     !== undefined) fields.municipio_codigo     = body.municipio_codigo    || null;
+    if (body.regime_tributario    !== undefined) fields.regime_tributario    = body.regime_tributario   || null;
+    if (body.serie_rps            !== undefined) fields.serie_rps            = body.serie_rps           || null;
+    if (body.aliquota_iss         !== undefined) fields.aliquota_iss         = body.aliquota_iss        ?? null;
+    if (body.login                !== undefined) fields.login                = body.login               || null;
+    if (body.api_key        !== undefined) fields.api_key        = safe(body.api_key,        (config as any).api_key);
+    if (body.client_secret  !== undefined) fields.client_secret  = safe(body.client_secret,  (config as any).client_secret);
+    if (body.focus_token    !== undefined) fields.focus_token    = safe(body.focus_token,    (config as any).focus_token);
+    if (body.senha          !== undefined) fields.senha          = safe(body.senha,          (config as any).senha);
+
+    return this.repo.updateConfiguracaoFiscal(config.id, fields);
+  }
+
+  async testarConexao() {
+    const config = await this.repo.getConfiguracaoFiscalAtiva(null);
+    if (!config) throw new FiscalConfigurationError('Configuração fiscal não encontrada. Configure antes de testar.');
+
+    if ((config.provedor_fiscal || 'mock') === 'mock') {
+      return { ok: true, message: 'Modo mock — conexão simulada com sucesso.', provider: 'mock', ambiente: config.ambiente };
+    }
+
+    const authResult = await this.auth.getValidAccessToken(config as Parameters<typeof this.auth.getValidAccessToken>[0]);
+    const ok = Boolean(authResult?.accessToken);
+    return {
+      ok,
+      message: ok ? 'Conexão estabelecida com sucesso.' : 'Autenticação falhou — verifique as credenciais.',
+      provider: config.provedor_fiscal,
+      ambiente: config.ambiente,
+    };
   }
 }
