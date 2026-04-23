@@ -14,11 +14,19 @@ interface Issue {
   message: string;
 }
 
+export type ValidateProviderPayloadOptions = {
+  /** URL base do webservice fiscal (ex.: cascavel.atende.net) — regras opcionais por município. */
+  fiscalApiBaseUrl?: string | null;
+};
+
 function onlyDigits(v: string): string {
   return v.replace(/\D/g, '');
 }
 
-export function validateProviderPayload(payload: EmitirProviderPayload): void {
+export function validateProviderPayload(
+  payload: EmitirProviderPayload,
+  opts?: ValidateProviderPayloadOptions,
+): void {
   const issues: Issue[] = [];
 
   // ── Itens ──────────────────────────────────────────────────────────────────
@@ -80,13 +88,27 @@ export function validateProviderPayload(payload: EmitirProviderPayload): void {
     });
   }
 
-  // ── Alíquota ISS ───────────────────────────────────────────────────────────
-  const aliquota = payload.config?.aliquotaIss ?? payload.aliquotaIss;
-  if (aliquota != null && (aliquota < 0 || aliquota > 100)) {
-    issues.push({
-      field: 'aliquotaIss',
-      message: `Alíquota ISS inválida: ${aliquota}% — deve estar entre 0 e 100.`,
-    });
+  const apiBase = String(opts?.fiscalApiBaseUrl || '').toLowerCase();
+
+  // ── Alíquota ISS (valor já consolidado no mapper: config quando informada, senão serviço)
+  const aliquotaRaw = payload.aliquotaIss ?? payload.config?.aliquotaIss;
+  if (aliquotaRaw != null) {
+    const aliquota =
+      typeof aliquotaRaw === 'number'
+        ? aliquotaRaw
+        : Number(String(aliquotaRaw).trim().replace(',', '.'));
+    if (!Number.isFinite(aliquota) || aliquota < 0 || aliquota > 100) {
+      issues.push({
+        field: 'aliquotaIss',
+        message: `Alíquota ISS inválida: ${aliquotaRaw}% — deve estar entre 0 e 100.`,
+      });
+    } else if (apiBase.includes('cascavel') && aliquota > 5) {
+      issues.push({
+        field: 'aliquotaIss',
+        message:
+          'Cascavel/IPM costuma aceitar alíquota de ISS entre 2% e 5%; acima disso o webservice costuma devolver erro 00034. Se você digitou “7.09” como percentual, isso costuma ser confusão com o item da LC 116 (serviço 7.09 / código 070901) — use o percentual de ISS correto (ex.: 2, 3 ou 5) em Fiscal → Configurações ou no cadastro do serviço.',
+      });
+    }
   }
 
   // ── Código de serviço ──────────────────────────────────────────────────────
@@ -96,6 +118,17 @@ export function validateProviderPayload(payload: EmitirProviderPayload): void {
       field: 'codigoServico',
       message: 'Código de serviço municipal (item da lista) não definido — a NFS-e pode ser rejeitada pela prefeitura.',
     });
+  }
+
+  if (apiBase.includes('cascavel')) {
+    const codAtiv = String(payload.config?.codigoAtividade ?? '').trim();
+    if (!codAtiv) {
+      issues.push({
+        field: 'config.codigoAtividade',
+        message:
+          'Webservice Cascavel/IPM: informe o código de tributação municipal do serviço (cadastro da prefeitura / “código de tributação” do item — no manual IPM costuma ir na tag codigo_atividade). Não confunda com o CNAE da empresa; sem o código correto a prefeitura costuma devolver o erro 00034.',
+      });
+    }
   }
 
   if (issues.length > 0) {

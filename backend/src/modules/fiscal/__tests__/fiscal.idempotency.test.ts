@@ -148,4 +148,31 @@ describe('FiscalIdempotencyService', () => {
       expect(result.isIdempotentHit).toBe(false);
     });
   });
+
+  describe('check() — nota com status erro (provider)', () => {
+    beforeEach(() => {
+      service = new FiscalIdempotencyService(
+        makeRepo({ id: 6, status: 'erro' }),
+      );
+    });
+
+    it('retorna shouldProceed=true e existingNota para atualizar a mesma linha', async () => {
+      const result = await service.check('nf_abc123');
+      expect(result.shouldProceed).toBe(true);
+      expect(result.isIdempotentHit).toBe(false);
+      expect(result.existingNota).toMatchObject({ id: 6, status: 'erro' });
+    });
+  });
+
+  describe('check() — status inesperado na nota existente', () => {
+    it('não prossegue com INSERT (evita duplicar external_id)', async () => {
+      service = new FiscalIdempotencyService(
+        makeRepo({ id: 7, status: 'status_desconhecido_teste' }),
+      );
+      const result = await service.check('nf_abc123');
+      expect(result.shouldProceed).toBe(false);
+      expect(result.isIdempotentHit).toBe(true);
+      expect(result.existingNota).toMatchObject({ id: 7 });
+    });
+  });
 });

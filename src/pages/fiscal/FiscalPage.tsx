@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -22,6 +23,12 @@ import {
   useFiscalKpis, useFiscalConfig, useUpdateFiscalConfig, useTestarConexaoFiscal,
   useNotasFiscais, usePedidos, useCancelarNotaFiscal, useHasPermissao,
 } from '@/hooks/useQuery';
+import {
+  downloadNotaFiscalArquivo,
+  fetchNotaFiscalVisualizacao,
+  openNotaFiscalPdf,
+  reenviarNotaFiscalEmail,
+} from '@/lib/api';
 import { toast } from 'sonner';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -69,27 +76,63 @@ function KpiCard({ icon, label, value, sub, accent }: {
 
 // ─── Status SEFAZ badge ────────────────────────────────────────────────────────
 
-function SefazStatus() {
+type ConfigStatus = 'configured' | 'unconfigured';
+
+function deriveConfigStatus(config: any): ConfigStatus {
+  if (!config) return 'unconfigured';
+  const provider = (config.provedor_fiscal || '').toLowerCase();
+  if (!provider || provider === 'mock') return 'unconfigured';
+  const hasCredentials =
+    config.api_key || config.focus_token || config.client_id ||
+    config.login || config.client_secret || config.senha;
+  return hasCredentials ? 'configured' : 'unconfigured';
+}
+
+function SefazStatus({ status }: { status: ConfigStatus }) {
+  if (status === 'configured') {
+    return (
+      <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+        SEFAZ Online
+      </div>
+    );
+  }
   return (
-    <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600">
-      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-      SEFAZ Online
+    <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      <span className="w-2 h-2 rounded-full bg-gray-400" />
+      Não configurado
     </div>
   );
+}
+
+// Detecta valores mascarados retornados pela API (ex: "••••1234", "••••••••")
+function isMasked(v: any): boolean {
+  return typeof v === 'string' && v.includes('••••');
+}
+
+// Retorna string vazia para valores mascarados (campos de senha)
+function safeDisplay(v: any): string {
+  if (!v || isMasked(v)) return '';
+  return String(v);
 }
 
 // ─── Aba: Emitidas ────────────────────────────────────────────────────────────
 
 function EmitidaTab({
-  notas, isLoading, onCancelar, onRefetch, podeCancelar,
+  notas, isLoading, onCancelar, onRefetch, isRefreshing, podeCancelar,
 }: {
   notas: any[]; isLoading: boolean;
-  onCancelar: (n: any) => void; onRefetch: () => void; podeCancelar: boolean;
+  onCancelar: (n: any) => void;
+  onRefetch: () => void | Promise<void>;
+  isRefreshing?: boolean;
+  podeCancelar: boolean;
 }) {
   const navigate = useNavigate();
   const [busca, setBusca] = useState('');
   const [statusFiltro, setStatusFiltro] = useState('');
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [xmlDialog, setXmlDialog] = useState<{ notaId: number; title: string; text: string; external?: string } | null>(null);
+  const [xmlLoadingId, setXmlLoadingId] = useState<number | null>(null);
 
   const filtered = useMemo(() => {
     let r = notas;
@@ -110,8 +153,71 @@ function EmitidaTab({
     else setSelected(new Set(filtered.map(n => n.id)));
   }
 
-  function handleBulkDownload() {
-    toast.info(`Download de ${selected.size} XML(s) em lote — funcionalidade em breve.`);
+  async function handleBulkDownload() {
+    if (selected.size === 0) return;
+    toast.info(`Baixando ${selected.size} arquivo(s)...`);
+    let ok = 0;
+    for (const id of selected) {
+      try {
+        await downloadNotaFiscalArquivo(id);
+        ok++;
+      } catch (e: any) {
+        toast.error(`Nota #${id}: ${e?.message || 'falha no download'}`);
+      }
+      await new Promise(r => setTimeout(r, 350));
+    }
+    if (ok) toast.success(`${ok} arquivo(s) obtido(s).`);
+  }
+
+  function handleBulkEmail() {
+    if (selected.size === 0) return;
+    const ids = [...selected];
+    const rows = notas.filter(n => ids.includes(n.id));
+    const emails = [...new Set(
+      rows.map(r => String(r?.clientes?.email || '').trim()).filter(Boolean),
+    )] as string[];
+    if (!emails.length) {
+      toast.error('Nenhum dos clientes selecionados tem e-mail cadastrado.');
+      return;
+    }
+    if (emails.length > 25) {
+      toast.error('Muitos destinatários distintos; reduza a seleção.');
+      return;
+    }
+    const subject = `NFS-e — ${rows.length} nota(s)`;
+    const body = [
+      'Olá,',
+      '',
+      'Resumo das notas fiscais:',
+      ...rows.map(r =>
+        `- #${r.numero || r.id}: ${r.status}, R$ ${Number(r.valor_total || 0).toFixed(2)}`
+          + (r.mensagem_erro ? ` — ${r.mensagem_erro}` : ''),
+      ),
+      '',
+      'XML/PDF: obtenha em Fiscal → Emitidas no sistema (menu de cada nota).',
+      '',
+      'Atenciosamente.',
+    ].join('\n');
+    window.location.href = `mailto:${emails.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    toast.success('Abrindo cliente de e-mail…');
+  }
+
+  async function verXmlNota(n: any) {
+    setXmlLoadingId(n.id);
+    try {
+      const { text, isExternalUrl } = await fetchNotaFiscalVisualizacao(n.id);
+      const external = isExternalUrl ? (text.match(/https?:\/\/\S+/)?.[0] ?? undefined) : undefined;
+      setXmlDialog({
+        notaId: n.id,
+        title: `Nota #${n.numero || n.numero_nota || n.id} — conteúdo`,
+        text,
+        external,
+      });
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível carregar o conteúdo.');
+    } finally {
+      setXmlLoadingId(null);
+    }
   }
 
   if (isLoading) {
@@ -144,16 +250,22 @@ function EmitidaTab({
           <option value="cancelada">Cancelada</option>
           <option value="erro">Rejeitada</option>
         </select>
-        <Button variant="outline" size="sm" onClick={onRefetch}>
-          <RefreshCw className="w-3.5 h-3.5 mr-1" /> Atualizar
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={Boolean(isRefreshing)}
+          onClick={() => void onRefetch()}
+        >
+          <RefreshCw className={`w-3.5 h-3.5 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} /> Atualizar
         </Button>
         {selected.size > 0 && (
           <div className="flex items-center gap-2 ml-auto">
             <span className="text-xs text-muted-foreground">{selected.size} selecionada(s)</span>
-            <Button variant="outline" size="sm" onClick={handleBulkDownload}>
+            <Button variant="outline" size="sm" onClick={() => void handleBulkDownload()}>
               <Download className="w-3.5 h-3.5 mr-1" /> Baixar XML
             </Button>
-            <Button variant="outline" size="sm" onClick={() => toast.info('Exportação em lote em breve.')}>
+            <Button variant="outline" size="sm" onClick={handleBulkEmail}>
               <Mail className="w-3.5 h-3.5 mr-1" /> Enviar e-mail
             </Button>
           </div>
@@ -238,16 +350,47 @@ function EmitidaTab({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => toast.info('Visualização XML em breve.')}>
-                          <Eye className="w-4 h-4 mr-2" /> Visualizar XML
+                        <DropdownMenuItem
+                          disabled={xmlLoadingId === n.id}
+                          onClick={() => void verXmlNota(n)}
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          {xmlLoadingId === n.id ? 'Carregando…' : 'Visualizar XML'}
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => window.open(`/api/fiscal/notas/${n.id}/xml`, '_blank')}>
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            try {
+                              await downloadNotaFiscalArquivo(n.id);
+                              toast.success('Download iniciado.');
+                            } catch (e: any) {
+                              toast.error(e?.message || 'Falha ao baixar.');
+                            }
+                          }}
+                        >
                           <Download className="w-4 h-4 mr-2" /> Baixar XML
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => window.open(`/api/fiscal/notas/${n.id}/pdf`, '_blank')}>
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            try {
+                              await openNotaFiscalPdf(n.id);
+                            } catch (e: any) {
+                              toast.error(e?.message || 'PDF indisponível.');
+                            }
+                          }}
+                        >
                           <FileText className="w-4 h-4 mr-2" /> Gerar DANFE
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => toast.info('Reenvio por e-mail em breve.')}>
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            try {
+                              const mailto = await reenviarNotaFiscalEmail(n.id);
+                              window.location.href = mailto;
+                              toast.success('Abrindo cliente de e-mail…');
+                            } catch (e: any) {
+                              toast.error(e?.message || 'Não foi possível reenviar.');
+                            }
+                          }}
+                        >
                           <Mail className="w-4 h-4 mr-2" /> Reenviar por e-mail
                         </DropdownMenuItem>
                         {podeCancelar && n.status === 'emitida' && (
@@ -270,6 +413,40 @@ function EmitidaTab({
           </table>
         </div>
       )}
+
+      <Dialog open={!!xmlDialog} onOpenChange={o => { if (!o) setXmlDialog(null); }}>
+        <DialogContent className="max-w-3xl max-h-[88vh] flex flex-col gap-3">
+          <DialogHeader>
+            <DialogTitle className="text-left">{xmlDialog?.title}</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="h-[min(60vh,520px)] w-full rounded-md border bg-muted/20 p-3">
+            <pre className="text-xs whitespace-pre-wrap break-words font-mono pr-4">{xmlDialog?.text}</pre>
+          </ScrollArea>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            {xmlDialog?.external && (
+              <Button variant="secondary" asChild className="w-full sm:w-auto">
+                <a href={xmlDialog.external} target="_blank" rel="noopener noreferrer">Abrir link externo</a>
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={async () => {
+                if (!xmlDialog) return;
+                try {
+                  await downloadNotaFiscalArquivo(xmlDialog.notaId);
+                  toast.success('Download iniciado.');
+                } catch (e: any) {
+                  toast.error(e?.message || 'Falha ao baixar.');
+                }
+              }}
+            >
+              <Download className="w-4 h-4 mr-1" /> Baixar arquivo
+            </Button>
+            <Button className="w-full sm:w-auto" onClick={() => setXmlDialog(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -513,6 +690,7 @@ function ConfiguracoesFiscaisTab() {
   const [dirty, setDirty] = useState(false);
 
   const merged = { ...config, ...form };
+  const configStatus = deriveConfigStatus(config);
 
   function set(k: string, v: any) {
     setForm(f => ({ ...f, [k]: v }));
@@ -521,7 +699,20 @@ function ConfiguracoesFiscaisTab() {
 
   async function handleSalvar() {
     try {
-      await updateConfig.mutateAsync(form);
+      const provider = (merged.provedor_fiscal || '').toLowerCase();
+      if (!provider || provider === 'mock') {
+        toast.error('Selecione um provedor fiscal real para salvar.');
+        return;
+      }
+      const payload: Record<string, any> = { ...form };
+      if (provider === 'atendenet') {
+        if (payload.client_id !== undefined) payload.login = payload.client_id;
+        if (payload.client_secret !== undefined) payload.senha = payload.client_secret;
+      }
+      if (provider === 'focus' && payload.api_key !== undefined) {
+        payload.focus_token = payload.api_key;
+      }
+      await updateConfig.mutateAsync(payload);
       setForm({});
       setDirty(false);
       toast.success('Configurações salvas com sucesso.');
@@ -531,10 +722,15 @@ function ConfiguracoesFiscaisTab() {
   }
 
   async function handleTestar() {
+    const provider = (merged.provedor_fiscal || '').toLowerCase();
+    if (!provider || provider === 'mock') {
+      toast.error('Selecione um provedor fiscal real e salve as credenciais antes do teste.');
+      return;
+    }
     try {
       const r = await testarConexao.mutateAsync(undefined);
-      if (r?.ok) toast.success(r.message || 'Conexão estabelecida!');
-      else toast.error(r?.message || 'Falha na conexão.');
+      if (r?.ok) toast.success(r.message || 'Conexão estabelecida com sucesso!');
+      else toast.error(r?.message || 'Falha na conexão — verifique as credenciais.');
     } catch (e: any) {
       toast.error(e.message || 'Erro ao testar conexão.');
     }
@@ -545,12 +741,9 @@ function ConfiguracoesFiscaisTab() {
   }
 
   const PROVEDORES = [
-    { value: 'mock',       label: 'Mock (desenvolvimento)' },
     { value: 'focus',      label: 'Focus NFe' },
     { value: 'atendenet',  label: 'AtendeNet' },
-    { value: 'plugnotas',  label: 'PlugNotas' },
-    { value: 'nfeio',      label: 'NFe.io' },
-    { value: 'enotas',     label: 'eNotas' },
+    { value: 'http',       label: 'HTTP (webservice próprio)' },
   ];
 
   const REGIMES = [
@@ -565,17 +758,30 @@ function ConfiguracoesFiscaisTab() {
   return (
     <div className="space-y-6 max-w-2xl">
 
-      {/* Status do sistema */}
-      <div className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
-        <Shield className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Sistema fiscal operacional</p>
-          <p className="text-xs text-emerald-700 dark:text-emerald-400">
-            SEFAZ-SP online · Provedor: {PROVEDORES.find(p => p.value === merged.provedor_fiscal)?.label || merged.provedor_fiscal || '—'}
-          </p>
+      {/* Status do sistema — varia conforme configuração real */}
+      {configStatus === 'configured' ? (
+        <div className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+          <Shield className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Sistema fiscal configurado</p>
+            <p className="text-xs text-emerald-700 dark:text-emerald-400">
+              Provedor: {PROVEDORES.find(p => p.value === merged.provedor_fiscal)?.label || merged.provedor_fiscal} · {merged.ambiente === 'producao' ? 'Produção' : 'Homologação'}
+            </p>
+          </div>
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-600 text-white">Ativo</span>
         </div>
-        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-600 text-white">Online</span>
-      </div>
+      ) : (
+        <div className="flex items-center gap-3 p-4 bg-muted/40 border rounded-xl">
+          <WifiOff className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-foreground/70">Sistema fiscal não configurado</p>
+            <p className="text-xs text-muted-foreground">
+              Selecione um provedor, insira as credenciais e clique em "Salvar credenciais".
+            </p>
+          </div>
+          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-muted text-muted-foreground border">Inativo</span>
+        </div>
+      )}
 
       {!podeEditar && (
         <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 rounded-lg text-sm text-amber-700">
@@ -597,10 +803,11 @@ function ConfiguracoesFiscaisTab() {
             <label className="text-sm font-medium">Provedor</label>
             <select
               disabled={!podeEditar}
-              value={merged.provedor_fiscal || 'mock'}
+              value={merged.provedor_fiscal || ''}
               onChange={e => set('provedor_fiscal', e.target.value)}
               className="w-full h-9 px-3 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
             >
+              <option value="" disabled>Selecione...</option>
               {PROVEDORES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
           </div>
@@ -628,9 +835,21 @@ function ConfiguracoesFiscaisTab() {
           <input
             type="text"
             disabled={!podeEditar}
-            value={merged.client_id || merged.login || ''}
+            value={safeDisplay(merged.client_id) || safeDisplay(merged.login)}
             onChange={e => set('client_id', e.target.value)}
             placeholder="usuario@empresa.com.br"
+            className="w-full h-9 px-3 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">URL base da API fiscal</label>
+          <input
+            type="text"
+            disabled={!podeEditar}
+            value={safeDisplay(merged.api_base_url)}
+            onChange={e => set('api_base_url', e.target.value)}
+            placeholder="https://seu-webservice-fiscal/api"
             className="w-full h-9 px-3 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
           />
         </div>
@@ -641,9 +860,13 @@ function ConfiguracoesFiscaisTab() {
             <input
               type={showSenha ? 'text' : 'password'}
               disabled={!podeEditar}
-              value={merged.client_secret || merged.senha || ''}
+              value={safeDisplay(form.client_secret ?? '')}
               onChange={e => set('client_secret', e.target.value)}
-              placeholder="••••••••••••••••"
+              placeholder={
+                isMasked(config?.client_secret) || isMasked(config?.senha)
+                  ? 'Senha salva — preencha para alterar'
+                  : 'Senha ou client secret'
+              }
               className="w-full h-9 pl-3 pr-10 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
             />
             <button
@@ -662,9 +885,13 @@ function ConfiguracoesFiscaisTab() {
             <input
               type={showToken ? 'text' : 'password'}
               disabled={!podeEditar}
-              value={merged.api_key || merged.focus_token || ''}
+              value={safeDisplay(form.api_key ?? '')}
               onChange={e => set('api_key', e.target.value)}
-              placeholder="••••••••••••••••••••••••"
+              placeholder={
+                isMasked(config?.api_key) || isMasked(config?.focus_token)
+                  ? 'Token salvo — preencha para alterar'
+                  : 'Token de API ou Bearer token'
+              }
               className="w-full h-9 pl-3 pr-10 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
             />
             <button
@@ -715,9 +942,13 @@ function ConfiguracoesFiscaisTab() {
             <input
               type={showCertSenha ? 'text' : 'password'}
               disabled={!podeEditar}
-              value={merged.certificate_password_ref || ''}
+              value={safeDisplay(form.certificate_password_ref ?? '')}
               onChange={e => set('certificate_password_ref', e.target.value)}
-              placeholder="••••••••"
+              placeholder={
+                isMasked(config?.certificate_password_ref)
+                  ? 'Senha salva — preencha para alterar'
+                  : 'Senha do arquivo .pfx'
+              }
               className="w-full h-9 pl-3 pr-10 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
             />
             <button
@@ -727,6 +958,40 @@ function ConfiguracoesFiscaisTab() {
             >
               {showCertSenha ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Prestador — CNPJ que vai no XML (tag &lt;prestador&gt;) */}
+      <div className="bg-card border rounded-xl p-6 space-y-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Building2 className="w-4 h-4 text-primary" />
+          <h3 className="font-semibold">Empresa prestadora</h3>
+          <span className="text-xs text-muted-foreground ml-1">CNPJ e razão social enviados no XML da NFS-e</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">CNPJ do prestador</label>
+            <input
+              type="text"
+              disabled={!podeEditar}
+              value={safeDisplay(form.cnpj !== undefined ? form.cnpj : merged.cnpj)}
+              onChange={e => set('cnpj', e.target.value)}
+              placeholder="Somente números ou com máscara"
+              className="w-full h-9 px-3 rounded-md border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+            />
+            <p className="text-xs text-muted-foreground">Deve ser o CNPJ cadastrado no portal fiscal (ex.: AtendeNet / prefeitura).</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Razão social</label>
+            <input
+              type="text"
+              disabled={!podeEditar}
+              value={safeDisplay(form.razao_social !== undefined ? form.razao_social : merged.razao_social)}
+              onChange={e => set('razao_social', e.target.value)}
+              placeholder="Nome empresarial do prestador"
+              className="w-full h-9 px-3 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+            />
           </div>
         </div>
       </div>
@@ -772,6 +1037,83 @@ function ConfiguracoesFiscaisTab() {
           </div>
         </div>
 
+        {(merged.provedor_fiscal || '').toLowerCase() === 'atendenet' && (
+          <div className="rounded-lg border border-dashed p-4 space-y-4 bg-muted/30">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <span className="font-medium text-foreground">Referência NFS-e Cascavel (ex.: nº 14641)</span>
+              {' — '}serviço <span className="font-mono">70901</span> (no XML vira <span className="font-mono">070901</span>), alíquota{' '}
+              <span className="font-mono">3%</span>, local <span className="font-mono">7493</span>, situação{' '}
+              <span className="font-mono">1</span> (TIRF — retenção no tomador) quando a nota for com retenção; rodapé indica tributação no município do prestador (
+              <span className="font-mono">tributa_municipio_prestador = S</span>).
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Item lista de serviço (LC 116)</label>
+                <input
+                  type="text"
+                  disabled={!podeEditar}
+                  placeholder="70901 ou 070901"
+                  value={merged.item_lista_servico ?? ''}
+                  onChange={e => set('item_lista_servico', e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Situação tributária IPM</label>
+                <select
+                  disabled={!podeEditar}
+                  value={merged.ipm_situacao_tributaria ?? '0'}
+                  onChange={e => set('ipm_situacao_tributaria', e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+                >
+                  <option value="0">0 — TI (tributada integralmente)</option>
+                  <option value="1">1 — TIRF (ISS retido pelo tomador)</option>
+                  <option value="2">2 — TIST (tomador substituto)</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Tributa município prestador</label>
+                <select
+                  disabled={!podeEditar}
+                  value={(merged.ipm_tributa_municipio_prestador || 'N').toUpperCase() === 'S' ? 'S' : 'N'}
+                  onChange={e => set('ipm_tributa_municipio_prestador', e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+                >
+                  <option value="N">N</option>
+                  <option value="S">S (ex.: ISS no município do prestador)</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Tributa município tomador</label>
+                <select
+                  disabled={!podeEditar}
+                  value={(merged.ipm_tributa_municipio_tomador || 'N').toUpperCase() === 'S' ? 'S' : 'N'}
+                  onChange={e => set('ipm_tributa_municipio_tomador', e.target.value)}
+                  className="w-full h-9 px-3 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+                >
+                  <option value="N">N</option>
+                  <option value="S">S</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Código de tributação municipal (IPM / AtendeNet)</label>
+          <input
+            type="text"
+            disabled={!podeEditar}
+            placeholder="Código do serviço na prefeitura (não é o CNAE do CNPJ)"
+            value={merged.codigo_atividade || ''}
+            onChange={e => set('codigo_atividade', e.target.value)}
+            className="w-full h-9 px-3 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+          />
+          <p className="text-xs text-muted-foreground">
+            No webservice IPM este valor costuma ir na tag codigo_atividade e deve ser o código de tributação do cadastro municipal do serviço (portal do contribuinte). CNAE (ex.: 47440005) costuma ser rejeitado com erro 00034.
+          </p>
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Regime tributário</label>
@@ -796,6 +1138,9 @@ function ConfiguracoesFiscaisTab() {
               onChange={e => set('aliquota_iss', parseFloat(e.target.value))}
               className="w-full h-9 px-3 rounded-md border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
             />
+            <p className="text-xs text-muted-foreground">
+              Informe o percentual de ISS (em muitos municípios IPM fica entre 2% e 5%). Não confunda com o item da LC 116 (ex.: 7,09 ou código 070901).
+            </p>
           </div>
         </div>
 
@@ -823,11 +1168,33 @@ export default function FiscalPage() {
   const [clienteSelecionado, setClienteSelecionado] = useState<any>(null);
 
   const { data: kpis,  isLoading: kpisLoading  } = useFiscalKpis();
-  const { data: notas = [], isLoading: notasLoading, refetch } = useNotasFiscais();
+  const {
+    data: notas = [],
+    isLoading: notasLoading,
+    isFetching: notasFetching,
+    refetch: refetchNotasQuery,
+  } = useNotasFiscais();
+  const { data: fiscalConfig } = useFiscalConfig();
   const cancelarNF = useCancelarNotaFiscal();
+  const configStatus = deriveConfigStatus(fiscalConfig);
 
   const podeCancelar = useHasPermissao('fiscal.cancelar');
   const podeEmitir   = useHasPermissao('fiscal.emitir');
+
+  const notasRefreshing = notasFetching && !notasLoading;
+
+  async function refetchNotasFiscais(options?: { silent?: boolean }) {
+    try {
+      const r = await refetchNotasQuery();
+      if (r.isError) {
+        toast.error((r.error as Error)?.message || 'Não foi possível atualizar a lista.');
+        return;
+      }
+      if (!options?.silent) toast.success('Lista atualizada.');
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível atualizar a lista.');
+    }
+  }
 
   function handleEmitirNovas(pedidos: any[]) {
     if (!podeEmitir) { toast.error('Sem permissão para emitir notas fiscais.'); return; }
@@ -849,7 +1216,7 @@ export default function FiscalPage() {
       toast.success('Nota fiscal cancelada.');
       setCancelarOpen(false);
       setNotaParaCancelar(null);
-      refetch();
+      await refetchNotasFiscais({ silent: true });
     } catch (e: any) {
       toast.error(e.message || 'Erro ao cancelar nota.');
     }
@@ -863,7 +1230,7 @@ export default function FiscalPage() {
         subtitle="Emissão e controle de notas fiscais eletrônicas"
         actions={
           <div className="flex items-center gap-3">
-            <SefazStatus />
+            <SefazStatus status={configStatus} />
             {podeEmitir && (
               <Button size="sm" onClick={handleEmitirNova}>
                 <FileText className="w-4 h-4 mr-1" /> Emitir nova NF-e
@@ -929,7 +1296,8 @@ export default function FiscalPage() {
             notas={notas as any[]}
             isLoading={notasLoading}
             onCancelar={n => { setNotaParaCancelar(n); setCancelarOpen(true); }}
-            onRefetch={refetch}
+            onRefetch={refetchNotasFiscais}
+            isRefreshing={notasRefreshing}
             podeCancelar={podeCancelar}
           />
         </TabsContent>
@@ -955,7 +1323,7 @@ export default function FiscalPage() {
         open={emitirDrawerOpen}
         onOpenChange={setEmitirDrawerOpen}
         pedidos={pedidosSelecionados}
-        onEmitido={() => { refetch(); setPedidosSelecionados([]); }}
+        onEmitido={() => { void refetchNotasFiscais({ silent: true }); setPedidosSelecionados([]); }}
       />
 
       {/* Drawer de detalhes do cliente */}

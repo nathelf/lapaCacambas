@@ -119,6 +119,70 @@ export class FiscalRepository {
     return data;
   }
 
+  /**
+   * Compatibilidade com schemas legados da tabela notas_fiscais.
+   * PostgREST retorna PGRST204 quando uma coluna não existe no cache do schema;
+   * Postgres retorna 42703 em SQL direto. Nunca enviar `mensagem_erro` se a
+   * tabela ainda usa apenas `erro_mensagem` (schema inicial).
+   */
+  async createNotaFiscalCompat(payload: Record<string, unknown>) {
+    const tryInsert = async (body: Record<string, unknown>) => {
+      const clean = Object.fromEntries(
+        Object.entries(body).filter(([, v]) => v !== undefined),
+      ) as Record<string, unknown>;
+      const { data, error } = await supabaseAdmin
+        .from('notas_fiscais')
+        .insert(clean)
+        .select('*')
+        .single();
+      if (error) throw error;
+      return data;
+    };
+
+    const isMissingColumnError = (error: any): boolean => {
+      const code = error?.code;
+      if (code === '42703' || code === 'PGRST204') return true;
+      const msg = String(error?.message || '');
+      return /column .* does not exist|schema cache/i.test(msg);
+    };
+
+    // 1) Modelo “hardening” (sem mensagem_erro — muitos bancos não têm essa coluna).
+    const semMensagemErro = { ...payload };
+    delete semMensagemErro.mensagem_erro;
+
+    try {
+      return await tryInsert(semMensagemErro);
+    } catch (error: any) {
+      if (!isMissingColumnError(error)) throw error;
+
+      const legacy: Record<string, unknown> = {
+        cliente_id: payload.cliente_id ?? null,
+        fatura_id: payload.fatura_id ?? null,
+        numero: payload.numero ?? payload.numero_nota ?? null,
+        serie: payload.serie ?? '1',
+        data_emissao: payload.data_emissao ?? new Date().toISOString(),
+        valor_total: payload.valor_total ?? 0,
+        base_calculo: payload.base_calculo ?? payload.valor_total ?? 0,
+        valor_iss: payload.valor_iss ?? 0,
+        codigo_servico: payload.codigo_servico ?? null,
+        descricao_servico: payload.descricao_servico ?? null,
+        observacao_fiscal: (payload.observacoes_fiscais ?? null) as string | null,
+        status: payload.status ?? 'pendente',
+        erro_mensagem: (payload.mensagem_erro ?? null) as string | null,
+        chave_acesso: payload.chave_acesso ?? null,
+        protocolo: payload.protocolo ?? null,
+        xml_url: payload.xml_url ?? null,
+        pdf_url: payload.pdf_url ?? null,
+        integracao_id: payload.external_id ?? null,
+        integracao_request: payload.payload_envio ?? null,
+        integracao_response: payload.payload_retorno ?? null,
+        created_by: payload.created_by ?? null,
+      };
+
+      return tryInsert(legacy);
+    }
+  }
+
   async linkNotaPedidos(notaFiscalId: number, pedidoIds: number[], valorTotal: number) {
     const valorPorPedido = pedidoIds.length > 0 ? valorTotal / pedidoIds.length : 0;
     const rows = pedidoIds.map((pedidoId) => ({
@@ -128,7 +192,21 @@ export class FiscalRepository {
       valor_vinculado:  valorPorPedido,
     }));
     const { error } = await supabaseAdmin.from('nota_fiscal_pedidos').insert(rows);
-    if (error) throw error;
+    if (!error) return;
+
+    // Compatibilidade para schema legado sem coluna valor_vinculado.
+    if (error.code === '42703' || error.code === 'PGRST204') {
+      const legacyRows = pedidoIds.map((pedidoId) => ({
+        nota_fiscal_id: notaFiscalId,
+        pedido_id: pedidoId,
+        valor: valorPorPedido,
+      }));
+      const { error: legacyError } = await supabaseAdmin.from('nota_fiscal_pedidos').insert(legacyRows);
+      if (legacyError) throw legacyError;
+      return;
+    }
+
+    throw error;
   }
 
   async updatePedidosAposEmissao(pedidoIds: number[], notaFiscalId: number, status: string) {
@@ -167,6 +245,34 @@ export class FiscalRepository {
       .single();
     if (error) throw error;
     return data;
+  }
+
+  /**
+   * Reemissão com mesma chave (external_id): atualiza linha existente após nova resposta do provider.
+   * Não altera id, external_id, created_at, created_by.
+   */
+  async updateNotaFiscalFromEmitirRetry(
+    notaId: number,
+    payload: Record<string, unknown>,
+    userId: string,
+  ): Promise<Record<string, unknown>> {
+    const skip = new Set(['id', 'created_at', 'created_by', 'external_id', 'deleted_at']);
+    const row: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(payload)) {
+      if (skip.has(k)) continue;
+      row[k] = v;
+    }
+    row.updated_by = userId;
+    row.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabaseAdmin
+      .from('notas_fiscais')
+      .update(row)
+      .eq('id', notaId)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data as Record<string, unknown>;
   }
 
   async cancelNota(id: number, mensagem: string, userId: string) {
@@ -209,7 +315,7 @@ export class FiscalRepository {
   }) {
     let query = supabaseAdmin
       .from('notas_fiscais')
-      .select('*, clientes(id, nome), nota_fiscal_pedidos(pedido_id, pedidos(numero))')
+      .select('*, clientes(id, nome, cnpj, email), nota_fiscal_pedidos(pedido_id, pedidos(numero))')
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .range(filters.offset, filters.offset + filters.limit - 1);

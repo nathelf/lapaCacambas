@@ -1,6 +1,33 @@
 import type { EmitirProviderPayload } from './providers/fiscal-provider.interface';
 import type { FiscalPreviewDTO, NotaFiscalResponseDTO } from './fiscal.types';
 
+/**
+ * Alíquota ISS enviada ao provedor: **Fiscal → Configurações (`aliquota_iss`) tem prioridade**
+ * sobre o cadastro de serviço do pedido — é o que o contribuinte parametrizou para NFS-e.
+ * Só usa a alíquota do serviço quando a config não define valor.
+ */
+function resolveAliquotaIssParaEmitir(
+  preview: FiscalPreviewDTO,
+  configFiscal?: Record<string, any> | null,
+): number {
+  const cfgRaw = configFiscal?.aliquota_iss;
+  const temCfg =
+    cfgRaw !== null && cfgRaw !== undefined && cfgRaw !== '';
+  if (temCfg) {
+    const cfg = Number(cfgRaw);
+    if (Number.isFinite(cfg) && cfg >= 0) return cfg;
+  }
+
+  const srvRaw = preview.servico?.aliquota;
+  const srv =
+    srvRaw !== null && srvRaw !== undefined && srvRaw !== ''
+      ? Number(srvRaw)
+      : NaN;
+  if (Number.isFinite(srv) && srv >= 0) return srv;
+
+  return 2;
+}
+
 export class FiscalMapper {
   mapPedidoPreviewToProviderPayload(
     preview: FiscalPreviewDTO,
@@ -8,7 +35,7 @@ export class FiscalMapper {
     idempotencyKey?: string,
     configFiscal?: Record<string, any> | null,
   ): EmitirProviderPayload {
-    const aliquota = configFiscal?.aliquota_iss ?? preview.servico?.aliquota;
+    const aliquota = resolveAliquotaIssParaEmitir(preview, configFiscal);
 
     return {
       idempotencyKey: idempotencyKey ?? '',
@@ -57,6 +84,10 @@ export class FiscalMapper {
         naturezaOperacao:  configFiscal.natureza_operacao    ?? 1,
         regimeTributario:  configFiscal.regime_tributario_cod ?? 1,
         codigoMunicipio:   (configFiscal.codigo_municipio || configFiscal.municipio_codigo) ?? null,
+        codigoAtividade:   configFiscal.codigo_atividade      ?? null,
+        situacaoTributariaIpm:         configFiscal.ipm_situacao_tributaria          ?? null,
+        tributaMunicipioPrestadorIpm: configFiscal.ipm_tributa_municipio_prestador   ?? null,
+        tributaMunicipioTomadorIpm:   configFiscal.ipm_tributa_municipio_tomador     ?? null,
       } : undefined,
       // Reforma Tributária 2026+ — somente quando habilitado na config
       reformaTributaria: (configFiscal?.cbs_habilitado || configFiscal?.ibs_habilitado) ? {
@@ -144,7 +175,14 @@ export class FiscalMapper {
       ambiente: row.ambiente ?? null,
       tipo_documento: row.tipo_documento ?? 'NFS-e',
       cliente_id: row.cliente_id ?? null,
-      clientes: row.clientes ? { id: row.clientes.id, nome: row.clientes.nome } : null,
+      clientes: row.clientes
+        ? {
+            id: row.clientes.id,
+            nome: row.clientes.nome,
+            cnpj: row.clientes.cnpj ?? null,
+            email: row.clientes.email ?? null,
+          }
+        : null,
       nota_fiscal_pedidos: Array.isArray(row.nota_fiscal_pedidos)
         ? row.nota_fiscal_pedidos.map((nfp: any) => ({
             pedido_id: nfp.pedido_id,

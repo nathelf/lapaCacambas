@@ -30,6 +30,16 @@ export interface FiscalPreviewDTO {
     tipo: 'PF' | 'PJ';
     email: string | null;
     telefone: string | null;
+    /** Logradouro e demais campos — obrigatórios no XML para vários municípios IPM (ex.: Cascavel). */
+    endereco?: string | null;
+    numero?: string | null;
+    bairro?: string | null;
+    /** Código IBGE ou TOM do município do tomador, quando cadastrado; senão usa o da config fiscal. */
+    municipio?: string | null;
+    uf?: string | null;
+    cep?: string | null;
+    idEstrangeiro?: string | null;
+    pais?: string | null;
   };
   servico: {
     id: number;
@@ -46,6 +56,8 @@ export interface EmitirNotaDTO {
   faturaId?: number | string | null;
   forcarEmissao?: boolean;
   observacoesFiscais?: string | null;
+  /** Sobrescreve codigo_atividade da config: código de tributação municipal do serviço (IPM), não CNAE. */
+  codigoAtividadeMunicipal?: string | null;
 }
 
 export interface FiscalProviderAuthDTO {
@@ -90,7 +102,7 @@ export interface NotaFiscalResponseDTO {
   ambiente: string | null;
   tipo_documento: string;
   cliente_id: number | null;
-  clientes: { id: number; nome: string } | null;
+  clientes: { id: number; nome: string; cnpj?: string | null; email?: string | null } | null;
   nota_fiscal_pedidos: Array<{ pedido_id: number; pedidos: { numero: string } | null }>;
   created_at: string;
 }

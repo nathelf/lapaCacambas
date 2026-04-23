@@ -136,6 +136,7 @@ export function useEmitirNotaFiscal() {
       faturaId?: number | null;
       forcarEmissao?: boolean;
       observacoesFiscais?: string | null;
+      codigoAtividadeMunicipal?: string | null;
     }) => api.emitirNotaFiscal(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['notas-fiscais'] });

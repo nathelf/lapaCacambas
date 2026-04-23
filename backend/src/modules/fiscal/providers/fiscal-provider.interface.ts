@@ -61,6 +61,14 @@ export interface EmitirProviderPayload {
     naturezaOperacao?: number | null;
     regimeTributario?: number | null;
     codigoMunicipio?: string | null;
+    /** Código de tributação municipal do serviço (IPM, tag codigo_atividade) — não confundir com CNAE. */
+    codigoAtividade?: string | null;
+    /** IPM: situacao_tributaria (ex.: 0=TI, 1=TIRF com retenção no tomador). */
+    situacaoTributariaIpm?: string | null;
+    /** IPM: tributa_municipio_prestador S/N */
+    tributaMunicipioPrestadorIpm?: string | null;
+    /** IPM: tributa_municipio_tomador S/N */
+    tributaMunicipioTomadorIpm?: string | null;
   };
   /** Reforma Tributária 2026+ — controlado por configuração */
   reformaTributaria?: {

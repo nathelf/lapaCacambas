@@ -1,6 +1,16 @@
 import { FiscalRepository } from './fiscal.repository';
 import type { FiscalPreviewDTO, FiscalValidationResultDTO } from './fiscal.types';
 
+/** CNPJ só dígitos; vazio ou claramente inválido/placeholder para prestador NFS-e. */
+function prestadorCnpjInvalidoParaNfse(cnpj: unknown): boolean {
+  const d = String(cnpj ?? '').replace(/\D/g, '');
+  if (d.length !== 14) return true;
+  if (/^(\d)\1{13}$/.test(d)) return true;
+  // 00.000.000/0001-00 — valor comum de seed/teste no cadastro
+  if (d === '00000000000100') return true;
+  return false;
+}
+
 export class FiscalValidationService {
   constructor(private readonly repo: FiscalRepository) {}
 
@@ -43,6 +53,12 @@ export class FiscalValidationService {
         tipo: cliente?.cnpj ? 'PJ' : 'PF',
         email: cliente?.email || null,
         telefone: cliente?.telefone || cliente?.celular || null,
+        endereco: cliente?.endereco ?? null,
+        numero:   cliente?.numero ?? null,
+        bairro:   cliente?.bairro ?? null,
+        municipio: (cliente as { codigo_ibge_municipio?: string | null })?.codigo_ibge_municipio ?? null,
+        uf:  cliente?.estado ?? null,
+        cep: cliente?.cep ?? null,
       },
       servico: servico
         ? {
@@ -154,6 +170,22 @@ export class FiscalValidationService {
           details: { clienteId: cliente.id, nome: cliente.nome },
         });
       }
+      const providerFiscal = String(config?.provedor_fiscal || '').toLowerCase();
+      if (providerFiscal === 'atendenet') {
+        const faltas: string[] = [];
+        if (!String(cliente.bairro || '').trim()) faltas.push('bairro');
+        if (!String(cliente.cep || '').replace(/\D/g, '')) faltas.push('CEP');
+        if (!String(cliente.estado || '').trim()) faltas.push('UF (estado)');
+        if (faltas.length) {
+          erros.push({
+            code: 'TOMADOR_ENDERECO_IPM',
+            message:
+              `Cliente "${cliente.nome}" (id: ${cliente.id}) sem ${faltas.join(', ')} — o webservice IPM (AtendeNet) exige endereço completo do tomador no XML.`,
+            field: 'cliente.endereco',
+            details: { clienteId: cliente.id, faltas },
+          });
+        }
+      }
     }
 
     // Validação da configuração fiscal
@@ -163,6 +195,7 @@ export class FiscalValidationService {
         message: 'Nenhuma configuração fiscal ativa encontrada. Execute a migration de seed fiscal (supabase/migrations/20260415000000_fiscal_sprint1_hardening.sql).',
       });
     } else {
+      const provider = String(config.provedor_fiscal || '').toLowerCase();
       if (!config.ambiente) {
         erros.push({
           code: 'AMBIENTE_FISCAL_INVALIDO',
@@ -171,7 +204,50 @@ export class FiscalValidationService {
           details: { configId: config.id },
         });
       }
-      if (!config.api_key && !(config.client_id && config.client_secret)) {
+      if (!provider) {
+        erros.push({
+          code: 'PROVEDOR_FISCAL_OBRIGATORIO',
+          message: 'Selecione um provedor fiscal real antes de emitir notas.',
+          field: 'provedor_fiscal',
+          details: { configId: config.id },
+        });
+      }
+      if (provider === 'mock') {
+        erros.push({
+          code: 'PROVEDOR_MOCK_DESABILITADO',
+          message: 'Provider mock está desabilitado. Configure Focus NFe, AtendeNet ou HTTP.',
+          field: 'provedor_fiscal',
+          details: { configId: config.id, provider },
+        });
+      }
+
+      if (provider === 'focus' && !config.focus_token && !config.api_key) {
+        erros.push({
+          code: 'FOCUS_TOKEN_OBRIGATORIO',
+          message: 'Focus NFe requer token (focus_token ou api_key) para autenticação.',
+          field: 'focus_token',
+          details: { configId: config.id },
+        });
+      }
+      if (provider === 'atendenet' && (!config.api_base_url || !config.login || !config.senha)) {
+        erros.push({
+          code: 'ATENDENET_CREDENCIAIS_INVALIDAS',
+          message: 'AtendeNet requer api_base_url, login e senha preenchidos.',
+          field: 'credenciais',
+          details: { configId: config.id, temApiBase: !!config.api_base_url, temLogin: !!config.login },
+        });
+      }
+      if (provider === 'atendenet' && prestadorCnpjInvalidoParaNfse((config as { cnpj?: string | null }).cnpj)) {
+        erros.push({
+          code: 'PRESTADOR_CNPJ_INVALIDO',
+          message:
+            'CNPJ do prestador na configuração fiscal está ausente ou é o CNPJ de teste 00.000.000/0001-00. '
+            + 'Informe o CNPJ real da empresa emissora em Fiscal → Configurações (e inscrição municipal / município).',
+          field: 'cnpj',
+          details: { configId: config.id },
+        });
+      }
+      if (provider !== 'focus' && provider !== 'atendenet' && !config.api_key && !(config.client_id && config.client_secret)) {
         erros.push({
           code: 'CREDENCIAIS_FISCAIS_INVALIDAS',
           message: `Configuração fiscal id=${config.id} sem credenciais: defina api_key OU (client_id + client_secret).`,

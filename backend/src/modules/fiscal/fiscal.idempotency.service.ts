@@ -11,7 +11,7 @@
  * Fluxo:
  *  - Antes de chamar o provider: verifica se já existe nota com essa chave
  *  - Se existe e status != ERRO_INTEGRACAO → retorna nota existente
- *  - Se existe com ERRO_INTEGRACAO → permite retry (nota será atualizada)
+ *  - Se existe com erro (erro | erro_integracao) → permite retry (nota será atualizada)
  *  - Se não existe → prossegue com emissão
  */
 import { createHash } from 'node:crypto';
@@ -77,7 +77,7 @@ export class FiscalIdempotencyService {
       status === NotaFiscalStatus.EM_PROCESSAMENTO
     ) {
       throw new FiscalConflictError(
-        `Nota fiscal já em processamento (status="${status}"). Aguarde a conclusão antes de tentar novamente.`,
+        `Nota fiscal já em processamento (status="${status}"). Aguarde alguns segundos e tente de novo — requisições em paralelo ou duplo clique geram conflito (HTTP 409).`,
         { idempotencyKey, notaId: existing.id, status },
       );
     }
@@ -96,8 +96,8 @@ export class FiscalIdempotencyService {
       };
     }
 
-    // Nota com erro de integração — retry permitido
-    if (status === NotaFiscalStatus.ERRO_INTEGRACAO) {
+    // Falha de emissão / integração — mesmo external_id, atualiza a linha existente (retry)
+    if (status === NotaFiscalStatus.ERRO_INTEGRACAO || status === 'erro') {
       return {
         shouldProceed: true,
         existingNota: existing as Record<string, unknown>,
@@ -106,12 +106,12 @@ export class FiscalIdempotencyService {
       };
     }
 
-    // Status desconhecido — permitir prosseguir defensivamente
+    // Existe registro com status inesperado — não duplicar INSERT (evita 409 em external_id)
     return {
-      shouldProceed: true,
-      existingNota: null,
+      shouldProceed: false,
+      existingNota: existing as Record<string, unknown>,
       idempotencyKey,
-      isIdempotentHit: false,
+      isIdempotentHit: true,
     };
   }
 }

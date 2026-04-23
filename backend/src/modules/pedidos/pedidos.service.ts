@@ -335,12 +335,33 @@ export async function deletar(id: number, userId: string): Promise<void> {
 }
 
 export async function buscarHistorico(pedidoId: number): Promise<any[]> {
-  const { data, error } = await supabaseAdmin
+  // usuario_id referencia auth.users, não profiles — PostgREST não embute "profiles:usuario_id" sem FK direta.
+  const { data: rows, error } = await supabaseAdmin
     .from('pedido_historico')
-    .select('*, profiles:usuario_id(nome)')
+    .select('*')
     .eq('pedido_id', pedidoId)
     .order('created_at', { ascending: true });
 
-  if (error) throw new Error('Falha ao buscar histórico do pedido.');
-  return data ?? [];
+  if (error) {
+    throw new Error(`Falha ao buscar histórico do pedido: ${error.message}`);
+  }
+
+  const list = rows ?? [];
+  const userIds = [...new Set(list.map((r: { usuario_id?: string | null }) => r.usuario_id).filter(Boolean))] as string[];
+  if (userIds.length === 0) return list;
+
+  const { data: profiles, error: pErr } = await supabaseAdmin
+    .from('profiles')
+    .select('id, nome')
+    .in('id', userIds);
+
+  if (pErr) {
+    throw new Error(`Falha ao buscar perfis do histórico: ${pErr.message}`);
+  }
+
+  const byId = new Map((profiles ?? []).map((p: { id: string; nome: string }) => [p.id, { nome: p.nome }]));
+  return list.map((r: { usuario_id?: string | null }) => ({
+    ...r,
+    profiles: r.usuario_id ? (byId.get(r.usuario_id) ?? null) : null,
+  }));
 }

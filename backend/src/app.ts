@@ -22,7 +22,11 @@ import { errorMiddleware } from './middlewares/error.middleware';
 
 export function createApp() {
   const app = express();
-  app.use(cors());
+  app.use(
+    cors({
+      exposedHeaders: ['Location', 'Content-Disposition'],
+    }),
+  );
   app.use(express.json({ limit: '2mb' }));
 
   // Correlation ID — deve vir antes de qualquer rota

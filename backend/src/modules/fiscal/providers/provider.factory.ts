@@ -4,6 +4,7 @@ import { FocusNfeProvider } from './focus-nfe.provider';
 import { AtendeNetProvider } from './atendenet.provider';
 import type { IFiscalProvider } from './fiscal-provider.interface';
 import { FiscalProvider, type FiscalProviderType } from '../fiscal.constants';
+import { FiscalConfigurationError } from '../fiscal.errors';
 
 /**
  * Cria o provider correto baseado na configuração fiscal do tenant.
@@ -17,7 +18,8 @@ export function providerFactory(providerName: string): IFiscalProvider {
     case FiscalProvider.FOCUS:      return new FocusNfeProvider();
     case FiscalProvider.ATENDENET:  return new AtendeNetProvider();
     default:
-      console.warn(`[FiscalProvider] Provider desconhecido: "${providerName}". Usando mock.`);
-      return new MockFiscalProvider();
+      throw new FiscalConfigurationError(
+        `Provider fiscal desconhecido: "${providerName}". Configure um provider suportado (focus, atendenet, http).`,
+      );
   }
 }

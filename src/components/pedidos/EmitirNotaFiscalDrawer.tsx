@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { StatusFiscalBadge } from '@/components/shared/StatusFiscalBadge';
 import { StatusBadge } from '@/components/shared/StatusBadge';
@@ -29,6 +30,7 @@ interface EmitirNotaFiscalDrawerProps {
 export function EmitirNotaFiscalDrawer({ open, onOpenChange, pedidos, onEmitido }: EmitirNotaFiscalDrawerProps) {
   const [resultado, setResultado] = useState<'success' | 'error' | null>(null);
   const [observacao, setObservacao] = useState('');
+  const [codigoAtividadeMunicipal, setCodigoAtividadeMunicipal] = useState('');
   const [notaGerada, setNotaGerada] = useState<{ numero: string | null; pdfUrl: string | null; xmlUrl: string | null } | null>(null);
   const [validationErros, setValidationErros] = useState<Array<{ code: string; message: string }>>([]);
   const [validationAlertas, setValidationAlertas] = useState<string[]>([]);
@@ -38,13 +40,18 @@ export function EmitirNotaFiscalDrawer({ open, onOpenChange, pedidos, onEmitido 
   const pedidosValidos = pedidos.filter(
     (p) => ['concluido', 'faturado'].includes(p.status) && p.statusFiscal !== 'emitida',
   );
+  const pedidosSemValor = pedidosValidos.filter((p) => Number(p.valor || 0) <= 0);
   const pedidosJaEmitidos = pedidos.filter((p) => p.statusFiscal === 'emitida');
   const clientesUnicos = [...new Set(pedidos.map((p) => p.clienteId))];
   const clienteUnico = clientesUnicos.length === 1;
   const valorTotal = pedidosValidos.reduce((acc, p) => acc + p.valor, 0);
 
   const podeEmitir =
-    pedidosValidos.length > 0 && clienteUnico && pedidosJaEmitidos.length === 0 && resultado !== 'success';
+    pedidosValidos.length > 0 &&
+    pedidosSemValor.length === 0 &&
+    clienteUnico &&
+    pedidosJaEmitidos.length === 0 &&
+    resultado !== 'success';
 
   const handleEmitir = async () => {
     if (!podeEmitir || emitir.isPending) return;
@@ -56,6 +63,7 @@ export function EmitirNotaFiscalDrawer({ open, onOpenChange, pedidos, onEmitido 
       const result = await emitir.mutateAsync({
         pedidoIds: pedidosValidos.map((p) => p.id),
         observacoesFiscais: observacao.trim() || null,
+        codigoAtividadeMunicipal: codigoAtividadeMunicipal.trim() || null,
       });
 
       // Capturar alertas mesmo em sucesso
@@ -91,6 +99,7 @@ export function EmitirNotaFiscalDrawer({ open, onOpenChange, pedidos, onEmitido 
     setResultado(null);
     setNotaGerada(null);
     setObservacao('');
+    setCodigoAtividadeMunicipal('');
     setValidationErros([]);
     setValidationAlertas([]);
     emitir.reset();
@@ -120,6 +129,17 @@ export function EmitirNotaFiscalDrawer({ open, onOpenChange, pedidos, onEmitido 
               <div>
                 <span className="font-medium">Pedidos já faturados:</span>{' '}
                 {pedidosJaEmitidos.map((p) => p.numero).join(', ')}
+              </div>
+            </div>
+          )}
+
+          {pedidosSemValor.length > 0 && (
+            <div className="flex items-start gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <div>
+                <span className="font-medium">Pedidos sem valor fiscal:</span>{' '}
+                {pedidosSemValor.map((p) => p.numero).join(', ')}.
+                Ajuste o valor do pedido para maior que zero antes de emitir a NF-e.
               </div>
             </div>
           )}
@@ -205,16 +225,32 @@ export function EmitirNotaFiscalDrawer({ open, onOpenChange, pedidos, onEmitido 
 
           {/* Observações (só quando apto e não emitida) */}
           {podeEmitir && (
-            <div className="space-y-1.5">
-              <Label className="text-xs">Observação fiscal (opcional)</Label>
-              <Textarea
-                value={observacao}
-                onChange={(e) => setObservacao(e.target.value)}
-                rows={2}
-                maxLength={2000}
-                placeholder="Observações da nota fiscal (máx. 2000 caracteres)"
-                disabled={emitir.isPending}
-              />
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Código de tributação municipal — IPM (opcional)</Label>
+                <Input
+                  value={codigoAtividadeMunicipal}
+                  onChange={(e) => setCodigoAtividadeMunicipal(e.target.value)}
+                  maxLength={120}
+                  placeholder="Código da prefeitura para o serviço (não CNAE)"
+                  disabled={emitir.isPending}
+                  className="font-mono text-sm"
+                />
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Sobrescreve a config fiscal. Use o código de tributação do cadastro municipal do serviço; CNAE costuma gerar erro 00034 no IPM.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Observação fiscal (opcional)</Label>
+                <Textarea
+                  value={observacao}
+                  onChange={(e) => setObservacao(e.target.value)}
+                  rows={2}
+                  maxLength={2000}
+                  placeholder="Observações da nota fiscal (máx. 2000 caracteres)"
+                  disabled={emitir.isPending}
+                />
+              </div>
             </div>
           )}
 

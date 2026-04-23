@@ -7,7 +7,6 @@ import { FiscalMapper } from './fiscal.mapper';
 import { FiscalRepository } from './fiscal.repository';
 import { FiscalService } from './fiscal.service';
 import { FiscalValidationService } from './fiscal.validation.service';
-import { FiscalNotFoundError } from './fiscal.errors';
 
 const previewSchema = z.object({
   pedidoIds: z.array(z.union([z.string(), z.number()])).min(1),
@@ -19,6 +18,7 @@ const emitirSchema = z.object({
   faturaId: z.union([z.string(), z.number()]).optional().nullable(),
   forcarEmissao: z.boolean().optional().default(false),
   observacoesFiscais: z.string().max(2000).optional().nullable(),
+  codigoAtividadeMunicipal: z.string().max(120).optional().nullable(),
 });
 
 const cancelSchema = z.object({
@@ -148,9 +148,16 @@ fiscalRouter.post('/notas/:id/cancelar', async (req, res, next) => {
 // ─── GET /notas/:id/xml ───────────────────────────────────────────────────────
 fiscalRouter.get('/notas/:id/xml', async (req, res, next) => {
   try {
-    const url = await service.getXmlUrl(Number(req.params.id));
-    if (!url) throw new FiscalNotFoundError('XML da nota fiscal', Number(req.params.id));
-    res.redirect(url);
+    const disposition = String(req.query.disposition || 'inline');
+    const result = await service.resolveNotaXmlResponse(Number(req.params.id));
+    if (result.type === 'redirect') {
+      return res.redirect(302, result.url);
+    }
+    const disp = disposition === 'attachment' ? 'attachment' : 'inline';
+    const safeName = result.filename.replace(/["\r\n]/g, '_');
+    res.setHeader('Content-Type', result.mime);
+    res.setHeader('Content-Disposition', `${disp}; filename="${safeName}"`);
+    res.send(result.body);
   } catch (error) {
     next(error);
   }
@@ -159,9 +166,19 @@ fiscalRouter.get('/notas/:id/xml', async (req, res, next) => {
 // ─── GET /notas/:id/pdf ───────────────────────────────────────────────────────
 fiscalRouter.get('/notas/:id/pdf', async (req, res, next) => {
   try {
-    const url = await service.getPdfUrl(Number(req.params.id));
-    if (!url) throw new FiscalNotFoundError('PDF da nota fiscal', Number(req.params.id));
-    res.redirect(url);
+    const result = await service.resolveNotaPdf(Number(req.params.id));
+    return res.redirect(302, result.url);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── POST /notas/:id/reenviar-email ───────────────────────────────────────────
+fiscalRouter.post('/notas/:id/reenviar-email', async (req, res, next) => {
+  try {
+    const dest = typeof req.body?.destinatario === 'string' ? req.body.destinatario : undefined;
+    const data = await service.buildMailtoReenvioNota(Number(req.params.id), dest);
+    res.json({ success: true, data, correlationId: req.correlationId });
   } catch (error) {
     next(error);
   }

@@ -69,39 +69,15 @@ export class FiscalAuthService {
   // ── AtendeNet: login/senha → session token ────────────────────────────────
 
   private async getAtendeNetToken(config: FiscalConfig): Promise<FiscalProviderAuthDTO> {
-    // Usa token cacheado se ainda válido
-    if (config.token_atual && !this.isTokenExpired(config.token_expira_em)) {
-      return { accessToken: config.token_atual, expiresAt: config.token_expira_em ?? null };
-    }
-
-    if (!config.api_base_url || !config.login || !config.senha) {
+    if (!config.login || !config.senha) {
       throw new FiscalAuthenticationError(
-        'AtendeNet: api_base_url, login e senha são obrigatórios.',
+        'AtendeNet/IPM: login e senha são obrigatórios.',
       );
     }
 
-    const res = await fetch(`${config.api_base_url}/api/v1/login`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ usuario: config.login, senha: config.senha }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      throw new FiscalAuthenticationError(
-        `AtendeNet: autenticação falhou — HTTP ${res.status}: ${body.slice(0, 200)}`,
-      );
-    }
-
-    const payload   = (await res.json()) as Record<string, unknown>;
-    const token     = String(payload.token || payload.access_token || '');
-    if (!token) throw new FiscalAuthenticationError('AtendeNet: resposta de login sem token.');
-
-    const expiresIn = Number(payload.expires_in || payload.expira_em || 3600);
-    const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
-
-    await this.repo.updateConfiguracaoFiscalToken(config.id, token, expiresAt);
-    return { accessToken: token, expiresAt };
+    // No contrato IPM da Lapa, a autenticação é Basic Auth por request (sem endpoint OAuth/login).
+    const basicAuth = Buffer.from(`${config.login}:${config.senha}`).toString('base64');
+    return { accessToken: basicAuth, expiresAt: null };
   }
 
   // ── OAuth client_credentials (provider genérico) ──────────────────────────

@@ -39,7 +39,13 @@ async function backendRequest<T = any>(path: string, init?: RequestInit): Promis
     const j = json as any;
     // Novo formato: { success: false, error: { code, message, details } }
     const msg = j?.error?.message || j?.message || `Erro backend (${res.status})`;
-    const err = Object.assign(new Error(msg), { code: j?.error?.code, details: j?.error?.details, status: res.status });
+    const err = Object.assign(new Error(msg), {
+      code: j?.error?.code,
+      details: j?.error?.details,
+      status: res.status,
+      data: j?.data,
+      raw: j,
+    });
     throw err;
   }
   return json as T;
@@ -314,19 +320,31 @@ export async function emitirNotaFiscal(input: {
   faturaId?: number | null;
   forcarEmissao?: boolean;
   observacoesFiscais?: string | null;
+  codigoAtividadeMunicipal?: string | null;
 }): Promise<{ ok: boolean; nota: any; validation: any; idempotent: boolean }> {
-  const res = await backendRequest<{ success: boolean; data: any }>('/api/fiscal/emitir', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-  const result = res?.data ?? res;
-  if (!result?.ok) {
-    const errs = (result?.validation?.erros || []).map((e: any) => e.message).join('; ');
-    throw Object.assign(new Error(errs || 'Pedido não apto para emissão fiscal.'), {
-      validation: result?.validation,
+  try {
+    const res = await backendRequest<{ success: boolean; data: any }>('/api/fiscal/emitir', {
+      method: 'POST',
+      body: JSON.stringify(input),
     });
+    const result = res?.data ?? res;
+    if (!result?.ok) {
+      const errs = (result?.validation?.erros || []).map((e: any) => e.message).join('; ');
+      throw Object.assign(new Error(errs || 'Pedido não apto para emissão fiscal.'), {
+        validation: result?.validation,
+      });
+    }
+    return result;
+  } catch (err: any) {
+    const validation = err?.data?.validation;
+    if (err?.status === 422 && validation) {
+      const errs = (validation.erros || []).map((e: any) => e.message).join('; ');
+      throw Object.assign(new Error(errs || 'Pedido não apto para emissão fiscal.'), {
+        validation,
+      });
+    }
+    throw err;
   }
-  return result;
 }
 
 /** @deprecated Use emitirNotaFiscal() — mantido por compatibilidade */
@@ -344,6 +362,105 @@ export async function cancelarNotaFiscal(id: number, reason?: string) {
     body: JSON.stringify({ reason: reason || 'Cancelamento solicitado pelo usuário' }),
   });
   return res?.data ?? res;
+}
+
+/** Fetch autenticado ao backend fiscal (stream/redirect sem parse JSON). */
+export async function fiscalFetchRaw(path: string, init?: RequestInit): Promise<Response> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Sessão inválida para chamada ao backend.');
+  const method = (init?.method || 'GET').toUpperCase();
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${session.access_token}`,
+  };
+  if (!['GET', 'HEAD'].includes(method)) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return fetch(`${BACKEND_URL}${path}`, {
+    ...init,
+    headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
+    redirect: 'manual',
+  });
+}
+
+export async function downloadNotaFiscalArquivo(notaId: number) {
+  const res = await fiscalFetchRaw(`/api/fiscal/notas/${notaId}/xml?disposition=attachment`);
+  if (res.status >= 300 && res.status < 400) {
+    const loc = res.headers.get('Location');
+    if (loc) {
+      window.open(loc, '_blank', 'noopener');
+      return;
+    }
+  }
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({})) as any;
+    throw new Error(j?.error?.message || j?.message || `Erro ao baixar (${res.status})`);
+  }
+  const cd = res.headers.get('Content-Disposition');
+  const fnMatch = cd?.match(/filename="([^"]+)"/);
+  const filename = fnMatch?.[1] || `nfse-${notaId}.xml`;
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+export async function fetchNotaFiscalVisualizacao(notaId: number): Promise<{ text: string; isExternalUrl: boolean }> {
+  const res = await fiscalFetchRaw(`/api/fiscal/notas/${notaId}/xml?disposition=inline`);
+  if (res.status >= 300 && res.status < 400) {
+    const loc = res.headers.get('Location');
+    if (loc) {
+      return {
+        text: `O XML desta nota está em um link externo.\n\n${loc}\n\nUse «Abrir link externo» ou baixe pelo menu Baixar XML.`,
+        isExternalUrl: true,
+      };
+    }
+  }
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({})) as any;
+    throw new Error(j?.error?.message || j?.message || `Erro (${res.status})`);
+  }
+  const text = await res.text();
+  return { text, isExternalUrl: false };
+}
+
+export async function openNotaFiscalPdf(notaId: number): Promise<void> {
+  const res = await fiscalFetchRaw(`/api/fiscal/notas/${notaId}/pdf`);
+  if (res.status >= 300 && res.status < 400) {
+    const loc = res.headers.get('Location');
+    if (loc) {
+      window.open(loc, '_blank', 'noopener');
+      return;
+    }
+  }
+  if (res.ok && (res.headers.get('Content-Type') || '').includes('pdf')) {
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(url), 120_000);
+    return;
+  }
+  const j = await res.json().catch(() => ({})) as any;
+  throw new Error(j?.error?.message || j?.message || 'PDF/DANFE indisponível para esta nota.');
+}
+
+export async function reenviarNotaFiscalEmail(notaId: number, destinatario?: string | null): Promise<string> {
+  const res = await backendRequest<{ success: boolean; data: { mailtoUrl: string } }>(
+    `/api/fiscal/notas/${notaId}/reenviar-email`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ destinatario: destinatario ?? null }),
+    },
+  );
+  const data = (res as any)?.data ?? (res as any);
+  const url = data?.mailtoUrl;
+  if (!url) throw new Error('Resposta inválida do servidor.');
+  return url as string;
 }
 
 // ===== BOLETOS =====
