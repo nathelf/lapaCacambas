@@ -26,8 +26,8 @@ export interface ExecucaoRow {
     observacao: string | null;
     clientes?: { nome: string; telefone: string | null };
     obras?: { nome: string };
-    enderecos_entrega?: { logradouro: string; numero: string; bairro: string; cidade: string };
-    cacambas?: { numero: string };
+    enderecos_entrega?: { endereco: string; numero: string | null; bairro: string | null; cidade: string | null };
+    cacambas?: { descricao: string };
   };
   motoristas?: { id: number; nome: string; celular: string | null } | null;
   veiculos?: { id: number; placa: string; modelo: string | null } | null;

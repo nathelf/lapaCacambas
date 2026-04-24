@@ -8,10 +8,6 @@ import type {
 
 // ─── Helpers de conversão ─────────────────────────────────────────────────────
 
-function enderecoLabel(e?: ExecucaoRow['pedidos'] extends infer P ? P extends object ? P['enderecos_entrega'] : never : never): string | null {
-  if (!e) return null;
-  return [e.logradouro, e.numero, e.bairro, e.cidade].filter(Boolean).join(', ');
-}
 
 function execucaoToDto(row: ExecucaoRow): ExecucaoDto {
   const p = row.pedidos;
@@ -27,8 +23,8 @@ function execucaoToDto(row: ExecucaoRow): ExecucaoDto {
     clienteNome: p?.clientes?.nome ?? null,
     clienteTelefone: p?.clientes?.telefone ?? null,
     obraNome: p?.obras?.nome ?? null,
-    enderecoEntrega: end ? [end.logradouro, end.numero, end.bairro, end.cidade].filter(Boolean).join(', ') : null,
-    cacambaNumero: p?.cacambas?.numero ?? null,
+    enderecoEntrega: end ? [end.endereco, end.numero, end.bairro, end.cidade].filter(Boolean).join(', ') : null,
+    cacambaNumero: p?.cacambas?.descricao ?? null,
     rotaParadaId: row.rota_parada_id,
     motoristaId: row.motorista_id,
     motoristaNome: row.motoristas?.nome ?? null,
@@ -95,8 +91,8 @@ export async function listarExecucoes(query: ListExecucoesQuery): Promise<Execuc
       pedidos(numero, tipo, data_programada, hora_programada, data_desejada, observacao,
         clientes(nome, telefone),
         obras(nome),
-        enderecos_entrega:enderecos_entrega(logradouro, numero, bairro, cidade),
-        cacambas(numero)
+        enderecos_entrega:enderecos_entrega(endereco, numero, bairro, cidade),
+        cacambas(descricao)
       ),
       motoristas(id, nome, celular),
       veiculos(id, placa, modelo)
@@ -133,8 +129,8 @@ export async function buscarExecucaoPorId(id: number): Promise<ExecucaoDto> {
       pedidos(numero, tipo, data_programada, hora_programada, data_desejada, observacao,
         clientes(nome, telefone),
         obras(nome),
-        enderecos_entrega:enderecos_entrega(logradouro, numero, bairro, cidade),
-        cacambas(numero)
+        enderecos_entrega:enderecos_entrega(endereco, numero, bairro, cidade),
+        cacambas(descricao)
       ),
       motoristas(id, nome, celular),
       veiculos(id, placa, modelo)
@@ -182,8 +178,8 @@ export async function atribuirExecucao(id: number, dto: AtribuirExecucaoDto): Pr
       pedidos(numero, tipo, data_programada, hora_programada, data_desejada, observacao,
         clientes(nome, telefone),
         obras(nome),
-        enderecos_entrega:enderecos_entrega(logradouro, numero, bairro, cidade),
-        cacambas(numero)
+        enderecos_entrega:enderecos_entrega(endereco, numero, bairro, cidade),
+        cacambas(descricao)
       ),
       motoristas(id, nome, celular),
       veiculos(id, placa, modelo)
@@ -221,8 +217,8 @@ export async function atualizarStatusExecucao(id: number, dto: UpdateStatusExecu
       pedidos(numero, tipo, data_programada, hora_programada, data_desejada, observacao,
         clientes(nome, telefone),
         obras(nome),
-        enderecos_entrega:enderecos_entrega(logradouro, numero, bairro, cidade),
-        cacambas(numero)
+        enderecos_entrega:enderecos_entrega(endereco, numero, bairro, cidade),
+        cacambas(descricao)
       ),
       motoristas(id, nome, celular),
       veiculos(id, placa, modelo)

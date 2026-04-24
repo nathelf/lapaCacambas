@@ -133,6 +133,9 @@ export function fixEncoding(text: string | null | undefined): string {
   fix('FABRICA◆◆O', 'FABRICAÇÃO');
   fix('EXPLORA◆◆O', 'EXPLORAÇÃO');
   fix('EDUCA◆◆O', 'EDUCAÇÃO');
+  fix('INSTITUI◆◆O', 'INSTITUIÇÃO');
+  fix('CONTRIBUI◆◆O', 'CONTRIBUIÇÃO');
+  fix('SUBSTITUI◆◆O', 'SUBSTITUIÇÃO');
   fix('NAVEGA◆◆O', 'NAVEGAÇÃO');
   fix('NEGOCIA◆◆O', 'NEGOCIAÇÃO');
   fix('AMPLIA◆◆O', 'AMPLIAÇÃO');
@@ -156,6 +159,7 @@ export function fixEncoding(text: string | null | undefined): string {
   fix('INFORMA◆AO', 'INFORMAÇÃO');
   fix('FABRICA◆AO', 'FABRICAÇÃO');
   fix('EDUCA◆AO', 'EDUCAÇÃO');
+  fix('INSTITUI◆AO', 'INSTITUIÇÃO');
   fix('PRESTA◆AO', 'PRESTAÇÃO');
   fix('COMUNICA◆AO', 'COMUNICAÇÃO');
   fix('LOCA◆AO', 'LOCAÇÃO');
@@ -222,6 +226,7 @@ export function fixEncoding(text: string | null | undefined): string {
   t = t.replace(/\bSERVICOS\b/g, 'SERVIÇOS');
   t = t.replace(/\bSERVICO\b/g, 'SERVIÇO');
   t = t.replace(/\bCOMERCIO\b/g, 'COMÉRCIO');
+  t = t.replace(/\bINSTITUICAO\b/gi, 'INSTITUIÇÃO');
 
   // ── 7. Indicadores ordinais (ª e º) após número ────────────────────────────
   // ª (U+00AA) e º (U+00BA) são bytes 0xAA/0xBA em Win-1252 — corrompem para ◆ ou ?
@@ -247,6 +252,47 @@ export function fixEncoding(text: string | null | undefined): string {
   t = replaceOrdinais(t, '?');
 
   return t;
+}
+
+const DEEP_FIX_SKIP_KEYS = new Set([
+  'password',
+  'senha',
+  'client_secret',
+  'api_key',
+  'focus_token',
+  'token_atual',
+  'access_token',
+  'refresh_token',
+  'authorization',
+  'payload_envio',
+  'payload_retorno',
+  'integracao_request',
+  'integracao_response',
+  'providerRequest',
+  'providerResponse',
+]);
+
+/**
+ * Aplica `fixEncoding` em todas as strings de um JSON (respostas da API).
+ * Evita chaves que costumam carregar segredos ou blobs grandes.
+ */
+export function deepFixEncoding(value: unknown, depth = 0): unknown {
+  if (depth > 24) return value;
+  if (typeof value === 'string') return fixEncoding(value);
+  if (Array.isArray(value)) return value.map((v) => deepFixEncoding(v, depth + 1));
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (DEEP_FIX_SKIP_KEYS.has(k)) {
+        out[k] = v;
+        continue;
+      }
+      out[k] = deepFixEncoding(v, depth + 1);
+    }
+    return out;
+  }
+  return value;
 }
 
 /** Aplica fixEncoding em todos os campos de texto de um objeto cliente */

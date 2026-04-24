@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { normalizeCliente, fixEncoding } from '@/lib/formatters';
+import { normalizeCliente, fixEncoding, deepFixEncoding } from '@/lib/formatters';
 
 /** Normaliza o sub-objeto `clientes` e campos planos de nome embutidos em pedidos, faturas, boletos etc. */
 function normalizeNested(record: any): any {
@@ -38,7 +38,8 @@ async function backendRequest<T = any>(path: string, init?: RequestInit): Promis
   if (!res.ok) {
     const j = json as any;
     // Novo formato: { success: false, error: { code, message, details } }
-    const msg = j?.error?.message || j?.message || `Erro backend (${res.status})`;
+    const rawMsg = j?.error?.message || j?.message || `Erro backend (${res.status})`;
+    const msg = typeof rawMsg === 'string' ? fixEncoding(rawMsg) : rawMsg;
     const err = Object.assign(new Error(msg), {
       code: j?.error?.code,
       details: j?.error?.details,
@@ -48,7 +49,7 @@ async function backendRequest<T = any>(path: string, init?: RequestInit): Promis
     });
     throw err;
   }
-  return json as T;
+  return deepFixEncoding(json) as T;
 }
 
 // ===== AUDIT LOG =====

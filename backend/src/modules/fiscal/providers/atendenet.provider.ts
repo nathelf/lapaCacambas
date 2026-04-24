@@ -19,6 +19,7 @@ import { FISCAL_LIMITS } from '../fiscal.constants';
 import { FiscalLogger } from '../fiscal.logger';
 import { withRetry } from '../fiscal.retry';
 import { normalizarCodigoMunicipioIpm } from '../ipm-codigo-municipio';
+import { decodeTextResponseBytes } from '../../../lib/http-text-encoding';
 
 export class AtendeNetProvider implements IFiscalProvider {
   private sessionCookie: string | null = null;
@@ -311,7 +312,8 @@ export class AtendeNetProvider implements IFiscalProvider {
         const m = /PHPSESSID=([^;]+)/i.exec(setCookie);
         if (m?.[1]) this.sessionCookie = m[1];
       }
-      const text = await res.text();
+      const buf = await res.arrayBuffer();
+      const text = decodeTextResponseBytes(buf, res.headers.get('content-type'));
       if (!res.ok) {
         throw new FiscalIntegrationError(`AtendeNet/IPM: HTTP ${res.status} - ${text.slice(0, 500)}`, {
           httpStatus: res.status,

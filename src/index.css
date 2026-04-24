@@ -45,6 +45,15 @@
 
     --radius: 0.5rem;
 
+    /* Login page extras */
+    --primary-deep: 215 85% 38%;
+    --primary-glow: 205 100% 70%;
+    --gradient-primary: linear-gradient(135deg, hsl(215 85% 42%), hsl(210 96% 56%));
+    --gradient-primary-hover: linear-gradient(135deg, hsl(215 90% 38%), hsl(205 100% 60%));
+    --gradient-overlay: linear-gradient(135deg, hsl(215 60% 15% / 0.88), hsl(210 80% 25% / 0.78));
+    --shadow-glow: 0 0 80px hsl(var(--primary) / 0.45);
+    --shadow-card: 0 10px 40px -10px hsl(215 40% 20% / 0.15);
+
     /* Sidebar - dark navy */
     --sidebar-bg: 222 47% 11%;
     --sidebar-fg: 213 31% 91%;
@@ -180,9 +189,29 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.animate-fade-in-up {
-  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%       { opacity: 0.7; transform: scale(1.08); }
 }
-.animate-fade-in {
-  animation: fade-in 0.4s ease-out both;
+.animate-fade-in-up  { animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in     { animation: fade-in 0.4s ease-out both; }
+.animate-pulse-glow  { animation: pulse-glow 3s ease-in-out infinite; }
+
+/* Login page — gradient utilities */
+@layer utilities {
+  .bg-gradient-overlay {
+    background-image: var(--gradient-overlay);
+  }
+  .bg-gradient-primary {
+    background-image: var(--gradient-primary);
+  }
+  .bg-gradient-primary-hover:hover {
+    background-image: var(--gradient-primary-hover);
+  }
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
 }
