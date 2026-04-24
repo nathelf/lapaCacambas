@@ -57,7 +57,12 @@ export function createApp() {
   app.use('/api/pedidos', requireAuth(['administrador', 'atendimento', 'gestor', 'fiscal', 'operador']), pedidosRouter);
   app.use('/api/usuarios', requireAuth([]), usuariosRouter);
   app.use('/api/relatorios', requireAuth(['administrador', 'financeiro', 'fiscal', 'gestor', 'atendimento']), relatoriosRouter);
-  app.use('/api/logistica', requireAuth(['administrador', 'gestor', 'operador', 'atendimento']), logisticaRouter);
+  // Inclui `motorista` para /motorista/minhas-os e ações de campo (retirar/entregar/coletar/pátio).
+  app.use(
+    '/api/logistica',
+    requireAuth(['administrador', 'gestor', 'operador', 'atendimento', 'motorista']),
+    logisticaRouter,
+  );
   app.use('/api/fiscal', requireAuth(['administrador', 'fiscal', 'gestor', 'atendimento']), fiscalRouter);
   app.use('/api', webhookRouter);
   app.use('/api', requireAuth(['administrador', 'financeiro', 'fiscal', 'gestor', 'atendimento']), financeiroRouter);

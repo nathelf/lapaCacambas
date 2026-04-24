@@ -31,50 +31,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
-    if (data) setProfile(data as Profile);
-  };
-
-  const fetchRoles = async (userId: string) => {
-    const { data } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId);
-    if (data) setRoles(data.map((r: any) => r.role));
+  const loadUserData = async (userId: string) => {
+    try {
+      const [{ data: profileRow }, { data: rolesRows }] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', userId).single(),
+        supabase.from('user_roles').select('role').eq('user_id', userId),
+      ]);
+      if (profileRow) setProfile(profileRow as Profile);
+      else setProfile(null);
+      setRoles(rolesRows?.map((r: { role: string }) => r.role) ?? []);
+    } catch (e) {
+      console.error('[Auth] Falha ao carregar perfil/papéis:', e);
+      setProfile(null);
+      setRoles([]);
+    }
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    let active = true;
+
+    const syncFromSession = async (session: Session | null) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) {
-        setTimeout(() => {
-          fetchProfile(session.user.id);
-          fetchRoles(session.user.id);
-        }, 0);
-      } else {
-        setProfile(null);
-        setRoles([]);
+      try {
+        if (session?.user) await loadUserData(session.user.id);
+        else {
+          setProfile(null);
+          setRoles([]);
+        }
+      } finally {
+        if (active) setLoading(false);
       }
-      setLoading(false);
+    };
+
+    void (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!active) return;
+        await syncFromSession(session);
+      } catch (e) {
+        console.error('[Auth] getSession:', e);
+        if (active) {
+          setProfile(null);
+          setRoles([]);
+          setLoading(false);
+        }
+      }
+    })();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!active) return;
+      if (event === 'TOKEN_REFRESHED') {
+        setSession(session);
+        setUser(session?.user ?? null);
+        return;
+      }
+      setLoading(true);
+      void syncFromSession(session);
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-        fetchRoles(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {

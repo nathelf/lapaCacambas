@@ -59,3 +59,18 @@ export type ListMotoristasQuery = {
   status?: StatusMotorista;
   busca?: string; // busca por nome ou CPF
 };
+
+/** Usuário (auth) com papel motorista no tenant, ainda sem linha em `motoristas.user_id`. */
+export type UsuarioMotoristaSemFicha = {
+  id: string;
+  nome: string;
+  email: string | null;
+};
+
+/** Perfis do mesmo tenant para escolher em `motoristas.user_id` */
+export type CandidatoVinculoMotorista = {
+  id: string;
+  nome: string;
+  email: string | null;
+  temPapelMotorista: boolean;
+};

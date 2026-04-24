@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeCliente, fixEncoding, deepFixEncoding } from '@/lib/formatters';
 
@@ -37,6 +38,13 @@ async function backendRequest<T = any>(path: string, init?: RequestInit): Promis
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const j = json as any;
+    if (res.status === 403) {
+      toast.error('Você não tem permissão para esta operação.', { id: 'backend-forbidden' });
+    }
+    if (res.status === 401) {
+      toast.error('Sessão expirada ou inválida. Faça login novamente.', { id: 'backend-unauthorized' });
+      void supabase.auth.signOut();
+    }
     // Novo formato: { success: false, error: { code, message, details } }
     const rawMsg = j?.error?.message || j?.message || `Erro backend (${res.status})`;
     const msg = typeof rawMsg === 'string' ? fixEncoding(rawMsg) : rawMsg;
@@ -179,6 +187,46 @@ export async function fetchMotoristas() {
 
 export async function fetchMotoristasAll() {
   return backendRequest<any[]>('/api/motoristas');
+}
+
+export async function fetchMotorista(id: number) {
+  return backendRequest<any>(`/api/motoristas/${id}`);
+}
+
+export type CandidatoVinculoMotorista = {
+  id: string;
+  nome: string;
+  email: string | null;
+  temPapelMotorista: boolean;
+};
+
+export async function fetchMotoristasVinculoCandidatos() {
+  return backendRequest<CandidatoVinculoMotorista[]>('/api/motoristas/vinculo/candidatos-usuarios');
+}
+
+export type UsuarioMotoristaSemFicha = {
+  id: string;
+  nome: string;
+  email: string | null;
+};
+
+/** Usuários do tenant com papel motorista e sem linha em `motoristas` (user_id). */
+export async function fetchMotoristasUsuariosSemFicha() {
+  return backendRequest<UsuarioMotoristaSemFicha[]>('/api/motoristas/meta/usuarios-sem-ficha');
+}
+
+/** Cria registro mínimo em `motoristas` e já vincula `user_id`. */
+export async function postMotoristaCriarFichaPorUsuario(userId: string) {
+  return backendRequest<any>(`/api/motoristas/meta/criar-ficha/${encodeURIComponent(userId)}`, {
+    method: 'POST',
+  });
+}
+
+export async function updateMotorista(id: number, dto: Record<string, unknown>) {
+  return backendRequest<any>(`/api/motoristas/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(dto),
+  });
 }
 
 // ===== VEICULOS =====
@@ -693,6 +741,84 @@ export async function adicionarParadaRota(rotaId: number, dto: { pedidoId?: numb
   return backendRequest<any>(`/api/logistica/rotas/${rotaId}/paradas`, {
     method: 'POST',
     body: JSON.stringify(dto),
+  });
+}
+
+// ─── Ciclo de vida das caçambas ───────────────────────────────────────────────
+
+export interface GeoExtra { lat?: number; lng?: number; observacao?: string; fotoUrl?: string; }
+
+export function retirarCacamba(execucaoId: number, unidadeCacambaId: number, geo: GeoExtra = {}) {
+  return backendRequest<{ ok: boolean }>(`/api/logistica/execucoes/${execucaoId}/retirar-cacamba`, {
+    method: 'POST', body: JSON.stringify({ unidadeCacambaId, ...geo }),
+  });
+}
+
+export function entregarCacamba(execucaoId: number, geo: GeoExtra = {}) {
+  return backendRequest<{ ok: boolean }>(`/api/logistica/execucoes/${execucaoId}/entregar-cacamba`, {
+    method: 'POST', body: JSON.stringify(geo),
+  });
+}
+
+export function coletarCacamba(execucaoId: number, geo: GeoExtra = {}) {
+  return backendRequest<{ ok: boolean }>(`/api/logistica/execucoes/${execucaoId}/coletar-cacamba`, {
+    method: 'POST', body: JSON.stringify(geo),
+  });
+}
+
+export function chegouPatio(execucaoId: number, geo: GeoExtra = {}) {
+  return backendRequest<{ ok: boolean }>(`/api/logistica/execucoes/${execucaoId}/chegou-patio`, {
+    method: 'POST', body: JSON.stringify(geo),
+  });
+}
+
+export function fetchOsTimeline(execucaoId: number) {
+  return backendRequest<any[]>(`/api/logistica/execucoes/${execucaoId}/timeline`);
+}
+
+export function fetchMinhasOs() {
+  return backendRequest<{
+    motoristaId: number | null;
+    data: any[];
+    vinculoPendente?: boolean;
+    cabecalho?: {
+      motoristaNome: string | null;
+      veiculo: { placa: string; modelo: string; marca: string | null } | null;
+    };
+  }>('/api/logistica/motorista/minhas-os');
+}
+
+export type HistoricoDiaMotoristaItem = {
+  id: number;
+  tipo: string;
+  tipoLabel: string;
+  horario: string;
+  patrimonio: string | null;
+  placaVeiculo: string | null;
+  modeloVeiculo: string | null;
+  motoristaNome: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  observacao: string | null;
+};
+
+export async function fetchMotoristaHistoricoDia() {
+  return backendRequest<HistoricoDiaMotoristaItem[]>('/api/logistica/motorista/historico-dia');
+}
+
+export function fetchUnidadesDisponiveis() {
+  return backendRequest<any[]>('/api/logistica/unidades-disponiveis');
+}
+
+export function entrarManutencao(unidadeId: number, observacao?: string) {
+  return backendRequest<{ ok: boolean }>(`/api/logistica/unidades/${unidadeId}/manutencao`, {
+    method: 'POST', body: JSON.stringify({ observacao }),
+  });
+}
+
+export function sairManutencao(unidadeId: number) {
+  return backendRequest<{ ok: boolean }>(`/api/logistica/unidades/${unidadeId}/sair-manutencao`, {
+    method: 'POST', body: JSON.stringify({}),
   });
 }
 

@@ -4,6 +4,8 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { AlertTriangle, Calendar, CheckCircle2, Container, CreditCard, Truck, Clock, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { useDashboardStats, usePedidos, useUnidadesCacamba } from '@/hooks/useQuery';
+import { useAuth } from '@/contexts/AuthContext';
+import { canAccessBackOffice } from '@/lib/permissions';
 import { STATUS_CACAMBA_LABELS, STATUS_PEDIDO_LABELS } from '../../shared/enums';
 import { formatMoeda, formatData } from '@/lib/formatters';
 
@@ -18,12 +20,14 @@ const CACAMBA_COLORS: Record<string, string> = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { roles } = useAuth();
+  const podePainel = canAccessBackOffice(roles);
   const today = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 
-  const { data: stats, isLoading: loadingStats } = useDashboardStats();
-  const { data: pedidosRaw, isLoading: loadingPedidos } = usePedidos();
+  const { data: stats, isLoading: loadingStats } = useDashboardStats(podePainel);
+  const { data: pedidosRaw, isLoading: loadingPedidos } = usePedidos(undefined, podePainel);
   const pedidosRecentes = (pedidosRaw as any)?.data ?? [];
-  const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesCacamba();
+  const { data: unidades = [], isLoading: loadingUnidades } = useUnidadesCacamba(podePainel);
 
   // Calcular pedidos por status para o gráfico de barras
   const pedidosAll = pedidosRecentes;

@@ -1,5 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import * as svc from './logistica.service';
+import * as cacamba from './cacamba.state.service';
 
 export const logisticaRouter = Router();
 
@@ -77,6 +78,125 @@ logisticaRouter.put('/execucoes/:id/atribuir', async (req: Request, res: Respons
     next(err);
   }
 });
+
+// ── Ciclo de vida das caçambas ────────────────────────────────────────────────
+
+const parseId = (v: string) => { const n = Number(v); if (isNaN(n)) throw new Error('ID inválido.'); return n; };
+const userId = (req: Request) => (req as any).user?.id ?? '';
+const tenantId = (req: Request) => (req as any).user?.tenant_id ?? '';
+const parseGeo = (body: any) => ({ lat: body.lat ? Number(body.lat) : undefined, lng: body.lng ? Number(body.lng) : undefined });
+
+// POST /api/logistica/execucoes/:id/retirar-cacamba
+// Body: { unidadeCacambaId, lat?, lng? }
+logisticaRouter.post('/execucoes/:id/retirar-cacamba', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    const { unidadeCacambaId } = req.body;
+    if (!unidadeCacambaId) { res.status(400).json({ message: 'unidadeCacambaId é obrigatório.' }); return; }
+    await cacamba.retirarDoPatio(id, Number(unidadeCacambaId), userId(req), parseGeo(req.body));
+    res.json({ ok: true });
+  } catch (err: any) {
+    if (err.message?.includes('indisponível') || err.message?.includes('status')) { res.status(422).json({ message: err.message }); return; }
+    next(err);
+  }
+});
+
+// POST /api/logistica/execucoes/:id/entregar-cacamba
+// Body: { fotoUrl?, lat?, lng?, observacao? }
+logisticaRouter.post('/execucoes/:id/entregar-cacamba', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    await cacamba.entregarNoCliente(id, userId(req), { ...parseGeo(req.body), fotoUrl: req.body.fotoUrl, observacao: req.body.observacao });
+    res.json({ ok: true });
+  } catch (err: any) {
+    if (err.message?.includes('status') || err.message?.includes('vinculada')) { res.status(422).json({ message: err.message }); return; }
+    next(err);
+  }
+});
+
+// POST /api/logistica/execucoes/:id/coletar-cacamba
+// Body: { lat?, lng?, observacao? }
+logisticaRouter.post('/execucoes/:id/coletar-cacamba', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    await cacamba.coletarDoCliente(id, userId(req), { ...parseGeo(req.body), observacao: req.body.observacao });
+    res.json({ ok: true });
+  } catch (err: any) {
+    if (err.message?.includes('status') || err.message?.includes('vinculada')) { res.status(422).json({ message: err.message }); return; }
+    next(err);
+  }
+});
+
+// POST /api/logistica/execucoes/:id/chegou-patio
+// Body: { lat?, lng? }
+logisticaRouter.post('/execucoes/:id/chegou-patio', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    await cacamba.chegarNoPatio(id, userId(req), parseGeo(req.body));
+    res.json({ ok: true });
+  } catch (err: any) {
+    if (err.message?.includes('status') || err.message?.includes('vinculada')) { res.status(422).json({ message: err.message }); return; }
+    next(err);
+  }
+});
+
+// GET /api/logistica/execucoes/:id/timeline
+logisticaRouter.get('/execucoes/:id/timeline', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    const data = await cacamba.buscarTimeline(id);
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+// GET /api/logistica/motorista/minhas-os  — OS designadas ao motorista logado
+logisticaRouter.get('/motorista/minhas-os', async (req, res, next) => {
+  try {
+    const data = await cacamba.minhasOsHoje(userId(req));
+    res.json(data);
+  } catch (err: any) {
+    if (err.message?.includes('não encontrado')) { res.status(404).json({ message: err.message }); return; }
+    next(err);
+  }
+});
+
+// GET /api/logistica/motorista/historico-dia — movimentações de caçamba hoje (America/Sao_Paulo)
+logisticaRouter.get('/motorista/historico-dia', async (req, res, next) => {
+  try {
+    const data = await cacamba.historicoDiaMotorista(userId(req));
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/logistica/unidades-disponiveis
+logisticaRouter.get('/unidades-disponiveis', async (req, res, next) => {
+  try {
+    const data = await cacamba.listarUnidadesDisponiveis(tenantId(req));
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+// POST /api/logistica/unidades/:id/manutencao
+logisticaRouter.post('/unidades/:id/manutencao', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    await cacamba.entrarManutencao(id, userId(req), tenantId(req), req.body.observacao);
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/logistica/unidades/:id/sair-manutencao
+logisticaRouter.post('/unidades/:id/sair-manutencao', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    await cacamba.sairManutencao(id, userId(req), tenantId(req));
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // PUT /api/logistica/execucoes/:id/status
 logisticaRouter.put('/execucoes/:id/status', async (req: Request, res: Response, next: NextFunction) => {

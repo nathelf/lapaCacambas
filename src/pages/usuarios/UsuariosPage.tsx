@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
@@ -13,9 +14,21 @@ import {
   usePatchUsuarioStatus,
   useDeleteUsuario,
   useHasPermissao,
+  useMotorista,
+  useMotoristaPorUsuario,
+  useUpdateMotorista,
 } from '@/hooks/useQuery';
 import { AppRole, APP_ROLE_LABELS } from '../../../shared/enums';
+import {
+  MotoristaFichaFields,
+  MOTORISTA_FICHA_EMPTY,
+  motoristaApiToFichaValues,
+  fichaValuesToUpdateDto,
+  type MotoristaFichaValues,
+} from '@/components/motoristas/MotoristaFichaFields';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { checkPermission } from '@/lib/permissions';
 
 const ALL_ROLES = Object.values(AppRole);
 
@@ -33,6 +46,16 @@ type EditForm = {
   roles: AppRole[];
 };
 
+/** Linha mínima da lista de usuários (API /usuarios). */
+type UsuarioLista = {
+  id: string;
+  email?: string | null;
+  nome?: string | null;
+  roles?: AppRole[];
+  ativo?: boolean;
+  lastSignIn?: string | null;
+};
+
 const CREATE_EMPTY: CreateForm = {
   email: '',
   password: '',
@@ -41,9 +64,13 @@ const CREATE_EMPTY: CreateForm = {
 };
 
 export default function UsuariosPage() {
-  const { data: usuarios = [], isLoading } = useUsuarios();
+  const { roles } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const podeListar = checkPermission(roles, ['administrador', 'gestor']);
+  const { data: usuarios = [], isLoading } = useUsuarios(undefined, podeListar);
   const createUsuario = useCreateUsuario();
   const updateUsuario = useUpdateUsuario();
+  const updateMotorista = useUpdateMotorista();
   const patchStatus = usePatchUsuarioStatus();
   const deleteUsuario = useDeleteUsuario();
 
@@ -55,18 +82,19 @@ export default function UsuariosPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingMotoristaId, setEditingMotoristaId] = useState<number | null>(null);
+  const [motoristaFicha, setMotoristaFicha] = useState<MotoristaFichaValues>(MOTORISTA_FICHA_EMPTY);
+  const fichaHydratedKey = useRef('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const [createForm, setCreateForm] = useState<CreateForm>(CREATE_EMPTY);
   const [editForm, setEditForm] = useState<EditForm>({ email: '', nome: '', password: '', roles: [] });
 
-  function abrirNovo() {
-    setCreateForm(CREATE_EMPTY);
-    setCreateOpen(true);
-  }
-
-  function abrirEditar(u: any) {
+  const abrirEditar = useCallback((u: UsuarioLista, motoristaIdFromRoute: number | null = null) => {
     setEditingId(u.id);
+    setEditingMotoristaId(motoristaIdFromRoute);
+    setMotoristaFicha(MOTORISTA_FICHA_EMPTY);
+    fichaHydratedKey.current = '';
     setEditForm({
       email: u.email ?? '',
       nome: u.nome ?? '',
@@ -74,6 +102,70 @@ export default function UsuariosPage() {
       roles: u.roles ?? [],
     });
     setEditOpen(true);
+  }, []);
+
+  const { data: motoById, isLoading: loadMotoById } = useMotorista(editingMotoristaId, editOpen && editingMotoristaId != null);
+  const { data: motoByUser, isFetching: loadMotoByUser } = useMotoristaPorUsuario(
+    editingId,
+    editOpen &&
+      !!editingId &&
+      editingMotoristaId == null &&
+      editForm.roles.includes(AppRole.MOTORISTA),
+  );
+
+  const motoristaRow = (motoById ?? motoByUser) as Record<string, unknown> | null | undefined;
+  const showMotoristaFicha =
+    editOpen && (editingMotoristaId != null || editForm.roles.includes(AppRole.MOTORISTA));
+  const motoristaFichaLoading =
+    showMotoristaFicha &&
+    ((editingMotoristaId != null && loadMotoById) ||
+      (editingMotoristaId == null && editForm.roles.includes(AppRole.MOTORISTA) && loadMotoByUser));
+
+  useEffect(() => {
+    if (!editOpen || !motoristaRow) return;
+    const mid = Number((motoristaRow as { id?: unknown }).id);
+    if (Number.isNaN(mid)) return;
+    const key = `${editingId}-${mid}`;
+    if (fichaHydratedKey.current === key) return;
+    fichaHydratedKey.current = key;
+    setMotoristaFicha(motoristaApiToFichaValues(motoristaRow));
+  }, [editOpen, editingId, motoristaRow]);
+
+  useEffect(() => {
+    if (!editOpen) fichaHydratedKey.current = '';
+  }, [editOpen]);
+
+  const editQueryKey = searchParams.toString();
+
+  useEffect(() => {
+    if (isLoading) return;
+    const params = new URLSearchParams(editQueryKey);
+    const edit = params.get('edit');
+    if (!edit) return;
+    const midStr = params.get('motoristaId');
+    const motoristaIdNum = midStr && !Number.isNaN(Number(midStr)) ? Number(midStr) : null;
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('edit');
+        next.delete('motoristaId');
+        return next;
+      },
+      { replace: true },
+    );
+
+    const u = (usuarios as UsuarioLista[]).find((x) => x.id === edit);
+    if (!u) {
+      toast.error('Usuário não encontrado neste tenant.');
+      return;
+    }
+    abrirEditar(u, motoristaIdNum);
+  }, [isLoading, usuarios, editQueryKey, abrirEditar, setSearchParams]);
+
+  function abrirNovo() {
+    setCreateForm(CREATE_EMPTY);
+    setCreateOpen(true);
   }
 
   async function handleCriar() {
@@ -92,8 +184,8 @@ export default function UsuariosPage() {
       });
       toast.success('Usuário criado.');
       setCreateOpen(false);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao criar usuário.');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao criar usuário.');
     }
   }
 
@@ -105,7 +197,16 @@ export default function UsuariosPage() {
       return;
     }
 
-    const dto: any = {
+    const ridPreview = motoristaRow?.id != null ? Number(motoristaRow.id) : NaN;
+    const deveSalvarFichaPreview =
+      !Number.isNaN(ridPreview) &&
+      (editForm.roles.includes(AppRole.MOTORISTA) || editingMotoristaId != null);
+    if (deveSalvarFichaPreview && !motoristaFicha.nome.trim()) {
+      toast.error('Nome na ficha do motorista é obrigatório.');
+      return;
+    }
+
+    const dto: Record<string, unknown> = {
       email: editForm.email.trim(),
       nome: editForm.nome.trim() || undefined,
       roles: editForm.roles,
@@ -114,19 +215,32 @@ export default function UsuariosPage() {
 
     try {
       await updateUsuario.mutateAsync({ id: editingId, data: dto });
-      toast.success('Usuário atualizado.');
+
+      const rid = motoristaRow?.id != null ? Number(motoristaRow.id) : NaN;
+      const deveSalvarFicha =
+        !Number.isNaN(rid) &&
+        (editForm.roles.includes(AppRole.MOTORISTA) || editingMotoristaId != null);
+      if (deveSalvarFicha) {
+        await updateMotorista.mutateAsync({
+          id: rid,
+          dto: fichaValuesToUpdateDto(motoristaFicha),
+        });
+      }
+
+      toast.success(deveSalvarFicha ? 'Usuário e ficha de motorista atualizados.' : 'Usuário atualizado.');
       setEditOpen(false);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao atualizar usuário.');
+      setEditingMotoristaId(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao atualizar usuário.');
     }
   }
 
-  async function handleToggleStatus(u: any) {
+  async function handleToggleStatus(u: UsuarioLista) {
     try {
       await patchStatus.mutateAsync({ id: u.id, ativo: !u.ativo });
       toast.success(`Usuário ${u.ativo ? 'desativado' : 'ativado'}.`);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao alterar status.');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao alterar status.');
     }
   }
 
@@ -135,8 +249,8 @@ export default function UsuariosPage() {
       await deleteUsuario.mutateAsync(id);
       toast.success('Usuário removido.');
       setDeleteConfirmId(null);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao remover usuário.');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Erro ao remover usuário.');
     }
   }
 
@@ -149,12 +263,21 @@ export default function UsuariosPage() {
     }));
   }
 
-  const isSaving = createUsuario.isPending || updateUsuario.isPending;
+  const isSaving = createUsuario.isPending || updateUsuario.isPending || updateMotorista.isPending;
   const isDeleting = deleteUsuario.isPending;
 
   const usuarioParaDelete = deleteConfirmId
-    ? (usuarios as any[]).find(u => u.id === deleteConfirmId)
+    ? (usuarios as UsuarioLista[]).find((u) => u.id === deleteConfirmId)
     : null;
+
+  if (!podeListar) {
+    return (
+      <div className="space-y-6 animate-fade-in-up">
+        <PageHeader title="Usuários" subtitle="Gestão de usuários, perfis e permissões" />
+        <p className="text-muted-foreground">Você não tem permissão para listar usuários nesta tela.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -172,7 +295,7 @@ export default function UsuariosPage() {
         <div className="flex justify-center py-12">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
-      ) : (usuarios as any[]).length === 0 ? (
+      ) : (usuarios as UsuarioLista[]).length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <Users className="w-10 h-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">Nenhum usuário cadastrado.</p>
@@ -194,7 +317,7 @@ export default function UsuariosPage() {
               </tr>
             </thead>
             <tbody>
-              {(usuarios as any[]).map((u: any) => (
+              {(usuarios as UsuarioLista[]).map((u) => (
                 <tr key={u.id}>
                   <td className="font-medium">{u.nome || '—'}</td>
                   <td className="text-sm">{u.email}</td>
@@ -330,10 +453,20 @@ export default function UsuariosPage() {
       </Dialog>
 
       {/* Dialog — Editar usuário */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-md">
+      <Dialog
+        open={editOpen}
+        onOpenChange={(open) => {
+          setEditOpen(open);
+          if (!open) {
+            setEditingMotoristaId(null);
+            setMotoristaFicha(MOTORISTA_FICHA_EMPTY);
+            fichaHydratedKey.current = '';
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Editar Usuário</DialogTitle>
+            <DialogTitle>Editar usuário</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
@@ -384,6 +517,33 @@ export default function UsuariosPage() {
                 ))}
               </div>
             </div>
+
+            {showMotoristaFicha && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Com perfil <strong>Motorista</strong>, os dados de CNH e frota ficam na mesma ficha. Abrir também a
+                  partir da tela <Link className="underline text-primary" to="/motoristas">Motoristas</Link> (botão
+                  Editar).
+                </p>
+                {motoristaFichaLoading ? (
+                  <div className="flex justify-center py-6">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : motoristaRow ? (
+                  <MotoristaFichaFields
+                    value={motoristaFicha}
+                    onChange={(patch) => setMotoristaFicha((prev) => ({ ...prev, ...patch }))}
+                    disabled={isSaving}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground border rounded-md p-3 bg-muted/30">
+                    Ainda não há registro em <strong>motoristas</strong> vinculado a este usuário. Crie a ficha na lista
+                    de motoristas (aviso &quot;sem ficha na frota&quot;) ou vincule o login em{' '}
+                    <Link className="underline text-primary" to="/motoristas">Motoristas</Link>.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter>

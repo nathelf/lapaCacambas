@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -37,13 +37,35 @@ import FiscalPage from "./pages/fiscal/FiscalPage";
 import WhatsAppPage from "./pages/whatsapp/WhatsAppPage";
 import OcorrenciasPage from "./pages/ocorrencias/OcorrenciasPage";
 import NotFound from "./pages/NotFound";
+import MotoristaPage from "./pages/motorista/MotoristaPage";
+import MotoristaLoginPage from "./pages/motorista/MotoristaLoginPage";
+import { isDriverOnlyUser } from "@/lib/permissions";
 
 const queryClient = new QueryClient();
 
 function ProtectedRoutes() {
-  const { user, loading } = useAuth();
+  const { user, loading, roles } = useAuth();
+  const location = useLocation();
+
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    if (location.pathname.startsWith('/motorista')) {
+      return <Navigate to="/motorista/login" replace state={{ from: location.pathname }} />;
+    }
+    return <Navigate to="/login" replace />;
+  }
+
+  const driverOnly = isDriverOnlyUser(roles);
+
+  if (driverOnly) {
+    return (
+      <Routes>
+        <Route path="/motorista/login" element={<Navigate to="/motorista" replace />} />
+        <Route path="/motorista" element={<MotoristaPage />} />
+        <Route path="*" element={<Navigate to="/motorista" replace state={{ from: location.pathname }} />} />
+      </Routes>
+    );
+  }
 
   return (
     <Routes>
@@ -79,6 +101,8 @@ function ProtectedRoutes() {
         <Route path="/usuarios" element={<UsuariosPage />} />
         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
       </Route>
+      {/* Rota sem AppLayout — interface mobile do motorista */}
+      <Route path="/motorista" element={<MotoristaPage />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
@@ -94,6 +118,7 @@ const App = () => (
           <AuthProvider>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/motorista/login" element={<MotoristaLoginPage />} />
               <Route path="/*" element={<ProtectedRoutes />} />
             </Routes>
           </AuthProvider>

@@ -45,11 +45,18 @@ export function useUpdateCliente() {
 }
 
 // ===== PEDIDOS =====
-export function usePedidos(filters?: {
-  status?: string; clienteId?: number; search?: string;
-  page?: number; limit?: number; dataInicio?: string; dataFim?: string;
-}) {
-  return useQuery({ queryKey: ['pedidos', filters], queryFn: () => api.fetchPedidos(filters) });
+export function usePedidos(
+  filters?: {
+    status?: string; clienteId?: number; search?: string;
+    page?: number; limit?: number; dataInicio?: string; dataFim?: string;
+  },
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ['pedidos', filters],
+    queryFn: () => api.fetchPedidos(filters),
+    enabled,
+  });
 }
 
 export function usePedido(id: number | undefined) {
@@ -207,6 +214,71 @@ export function useMotoristasAll() {
   return useQuery({ queryKey: ['motoristas-all'], queryFn: api.fetchMotoristasAll });
 }
 
+export function useMotorista(id: number | null, enabled = true) {
+  return useQuery({
+    queryKey: ['motorista', id],
+    queryFn: () => api.fetchMotorista(id!),
+    enabled: enabled && id != null && !Number.isNaN(id),
+  });
+}
+
+/** Primeira ficha do tenant com `user_id` igual ao informado (para edição em Usuários). */
+export function useMotoristaPorUsuario(userId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ['motorista-por-usuario', userId],
+    queryFn: async () => {
+      const list = await api.fetchMotoristasAll();
+      const row = (list as Record<string, unknown>[]).find(
+        (m) => (m.userId ?? m.user_id) === userId,
+      );
+      return row ?? null;
+    },
+    enabled: enabled && !!userId,
+  });
+}
+
+export function useMotoristasVinculoCandidatos(enabled: boolean) {
+  return useQuery({
+    queryKey: ['motoristas-vinculo-candidatos'],
+    queryFn: api.fetchMotoristasVinculoCandidatos,
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useMotoristasUsuariosSemFicha() {
+  return useQuery({
+    queryKey: ['motoristas-usuarios-sem-ficha'],
+    queryFn: api.fetchMotoristasUsuariosSemFicha,
+    staleTime: 30_000,
+  });
+}
+
+export function useCriarFichaMotoristaPorUsuario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => api.postMotoristaCriarFichaPorUsuario(userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['motoristas-all'] });
+      qc.invalidateQueries({ queryKey: ['motoristas'] });
+      qc.invalidateQueries({ queryKey: ['motoristas-usuarios-sem-ficha'] });
+      qc.invalidateQueries({ queryKey: ['motoristas-vinculo-candidatos'] });
+    },
+  });
+}
+
+export function useUpdateMotorista() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dto }: { id: number; dto: Record<string, unknown> }) => api.updateMotorista(id, dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['motoristas-all'] });
+      qc.invalidateQueries({ queryKey: ['motoristas'] });
+      qc.invalidateQueries({ queryKey: ['motoristas-usuarios-sem-ficha'] });
+    },
+  });
+}
+
 // ===== SESSÃO ATUAL =====
 export function useMe() {
   return useQuery({
@@ -223,8 +295,12 @@ export function useHasPermissao(codigo: string): boolean {
 }
 
 // ===== USUÁRIOS =====
-export function useUsuarios(busca?: string) {
-  return useQuery({ queryKey: ['usuarios', busca], queryFn: () => api.fetchUsuarios(busca) });
+export function useUsuarios(busca?: string, enabled = true) {
+  return useQuery({
+    queryKey: ['usuarios', busca],
+    queryFn: () => api.fetchUsuarios(busca),
+    enabled,
+  });
 }
 
 export function useUsuario(id: string | undefined) {
@@ -343,19 +419,24 @@ export function useMateriais() {
   return useQuery({ queryKey: ['materiais'], queryFn: api.fetchMateriais });
 }
 
-export function useUnidadesCacamba() {
-  return useQuery({ queryKey: ['unidades-cacamba'], queryFn: api.fetchUnidadesCacamba });
+export function useUnidadesCacamba(enabled = true) {
+  return useQuery({
+    queryKey: ['unidades-cacamba'],
+    queryFn: api.fetchUnidadesCacamba,
+    enabled,
+  });
 }
 
 export function useContasPagar(filters?: { status?: string }) {
   return useQuery({ queryKey: ['contas-pagar', filters], queryFn: () => api.fetchContasPagar(filters) });
 }
 
-export function useDashboardStats() {
+export function useDashboardStats(enabled = true) {
   return useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: api.fetchDashboardStats,
     refetchInterval: 30000,
+    enabled,
   });
 }
 
@@ -477,6 +558,100 @@ export function useAdicionarParada() {
       qc.invalidateQueries({ queryKey: ['rotas'] });
       qc.invalidateQueries({ queryKey: ['execucoes'] });
     },
+  });
+}
+
+// ===== CICLO DE VIDA DAS CAÇAMBAS =====
+
+export function useMinhasOs(options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true;
+  return useQuery({
+    queryKey: ['minhas-os'],
+    queryFn:  api.fetchMinhasOs,
+    refetchInterval: enabled ? 20_000 : false,
+    enabled,
+  });
+}
+
+export function useMotoristaHistoricoDia(options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true;
+  return useQuery({
+    queryKey: ['motorista-historico-dia'],
+    queryFn: api.fetchMotoristaHistoricoDia,
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+export function useUnidadesDisponiveis(options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true;
+  return useQuery({
+    queryKey: ['unidades-disponiveis'],
+    queryFn:  api.fetchUnidadesDisponiveis,
+    staleTime: 10_000,
+    enabled,
+  });
+}
+
+export function useOsTimeline(execucaoId: number | undefined) {
+  return useQuery({
+    queryKey: ['os-timeline', execucaoId],
+    queryFn:  () => api.fetchOsTimeline(execucaoId!),
+    enabled:  !!execucaoId,
+    staleTime: 5_000,
+  });
+}
+
+function invalidateCacamba(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['minhas-os'] });
+  qc.invalidateQueries({ queryKey: ['motorista-historico-dia'] });
+  qc.invalidateQueries({ queryKey: ['execucoes'] });
+  qc.invalidateQueries({ queryKey: ['unidades-disponiveis'] });
+  qc.invalidateQueries({ queryKey: ['unidades-cacamba'] });
+}
+
+export function useRetirarCacamba() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ execucaoId, unidadeCacambaId, geo }: { execucaoId: number; unidadeCacambaId: number; geo?: api.GeoExtra }) =>
+      api.retirarCacamba(execucaoId, unidadeCacambaId, geo),
+    onSuccess: () => invalidateCacamba(qc),
+  });
+}
+
+export function useEntregarCacamba() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ execucaoId, geo }: { execucaoId: number; geo?: api.GeoExtra }) =>
+      api.entregarCacamba(execucaoId, geo),
+    onSuccess: (_, v) => { invalidateCacamba(qc); qc.invalidateQueries({ queryKey: ['os-timeline', v.execucaoId] }); },
+  });
+}
+
+export function useColetarCacamba() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ execucaoId, geo }: { execucaoId: number; geo?: api.GeoExtra }) =>
+      api.coletarCacamba(execucaoId, geo),
+    onSuccess: () => invalidateCacamba(qc),
+  });
+}
+
+export function useChegouPatio() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ execucaoId, geo }: { execucaoId: number; geo?: api.GeoExtra }) =>
+      api.chegouPatio(execucaoId, geo),
+    onSuccess: () => invalidateCacamba(qc),
+  });
+}
+
+export function useManutencao() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ unidadeId, observacao, sair }: { unidadeId: number; observacao?: string; sair?: boolean }) =>
+      sair ? api.sairManutencao(unidadeId) : api.entrarManutencao(unidadeId, observacao),
+    onSuccess: () => invalidateCacamba(qc),
   });
 }
 

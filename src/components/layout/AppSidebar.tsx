@@ -1,17 +1,27 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Building2, ClipboardList, Container,
   Truck, UserCog, Wrench, Receipt, FileText, Wallet,
   TrendingUp, Package, Boxes, Settings, BarChart3, ChevronDown,
-  MessageSquare, AlertTriangle, MapPin, Tag
+  MessageSquare, AlertTriangle, MapPin, Tag, Smartphone
 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { type AppRole, canAccessBackOffice, checkPermission } from '@/lib/permissions';
+
+interface MenuChild {
+  label: string;
+  path: string;
+  rolesAnyOf?: AppRole[];
+}
 
 interface MenuItem {
   label: string;
   icon: React.ElementType;
   path?: string;
-  children?: { label: string; path: string }[];
+  /** Se definido, o item só aparece com pelo menos uma destas roles. */
+  rolesAnyOf?: AppRole[];
+  children?: MenuChild[];
 }
 
 interface MenuSection {
@@ -41,6 +51,7 @@ const menuSections: MenuSection[] = [
     title: 'FROTA & LOGÍSTICA',
     items: [
       { label: 'Caçambas', icon: Container, path: '/cacambas' },
+      { label: 'App Motorista', icon: Smartphone, path: '/motorista', rolesAnyOf: ['motorista'] },
       { label: 'Caminhões', icon: Truck, path: '/veiculos' },
       { label: 'Motoristas', icon: UserCog, path: '/motoristas' },
       { label: 'Máquinas', icon: Wrench, path: '/maquinas' },
@@ -76,16 +87,45 @@ const menuSections: MenuSection[] = [
       { label: 'Relatórios', icon: BarChart3, path: '/relatorios' },
       { label: 'Fornecedores', icon: Package, path: '/fornecedores' },
       { label: 'Materiais', icon: Boxes, path: '/materiais' },
-      { label: 'Usuários', icon: Users, path: '/usuarios' },
-      { label: 'Configurações', icon: Settings, path: '/configuracoes' },
+      { label: 'Usuários', icon: Users, path: '/usuarios', rolesAnyOf: ['administrador', 'gestor'] },
+      { label: 'Configurações', icon: Settings, path: '/configuracoes', rolesAnyOf: ['administrador', 'gestor'] },
     ],
   },
 ];
 
+function menuItemVisible(userRoles: string[], item: MenuItem): boolean {
+  if (item.rolesAnyOf?.length) return checkPermission(userRoles, item.rolesAnyOf);
+  return canAccessBackOffice(userRoles);
+}
+
+function menuChildVisible(userRoles: string[], child: MenuChild): boolean {
+  if (child.rolesAnyOf?.length) return checkPermission(userRoles, child.rolesAnyOf);
+  return canAccessBackOffice(userRoles);
+}
+
 export function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { roles } = useAuth();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const sections = useMemo(() => {
+    return menuSections
+      .map((section) => ({
+        ...section,
+        items: section.items
+          .map((item) => {
+            if (item.children) {
+              const children = item.children.filter((c) => menuChildVisible(roles, c));
+              if (children.length === 0) return null;
+              return { ...item, children };
+            }
+            return menuItemVisible(roles, item) ? item : null;
+          })
+          .filter(Boolean) as MenuItem[],
+      }))
+      .filter((s) => s.items.length > 0);
+  }, [roles]);
 
   const toggleExpand = (label: string) => {
     setExpanded(prev => ({ ...prev, [label]: !prev[label] }));
@@ -119,7 +159,7 @@ export function AppSidebar() {
 
       {/* Menu */}
       <nav className="flex-1 py-2 px-2">
-        {menuSections.map((section) => (
+        {sections.map((section) => (
           <div key={section.title}>
             <div className="sidebar-section-title">{section.title}</div>
             {section.items.map((item) => {
@@ -157,7 +197,7 @@ export function AppSidebar() {
               }
               return (
                 <button
-                  key={item.path}
+                  key={item.path ?? item.label}
                   onClick={() => navigate(item.path!)}
                   className={`sidebar-item w-full ${isActive(item.path) ? 'active' : ''}`}
                 >
