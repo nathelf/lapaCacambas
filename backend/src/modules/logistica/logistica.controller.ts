@@ -5,6 +5,25 @@ export const logisticaRouter = Router();
 
 // ─── Execuções ────────────────────────────────────────────────────────────────
 
+// POST /api/logistica/execucoes
+logisticaRouter.post('/execucoes', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { pedidoId, tipo, motoristaId, veiculoId } = req.body;
+    if (!pedidoId || !tipo) {
+      res.status(400).json({ message: 'pedidoId e tipo são obrigatórios.' });
+      return;
+    }
+    const data = await svc.criarExecucao(Number(pedidoId), tipo, motoristaId, veiculoId);
+    res.status(201).json(data);
+  } catch (err: any) {
+    if (err.message?.includes('não encontrado') || err.message?.includes('Já existe')) {
+      res.status(422).json({ message: err.message });
+      return;
+    }
+    next(err);
+  }
+});
+
 // GET /api/logistica/execucoes?status=pendente&data=2026-04-08&semAtribuicao=true&dataInicio=2026-04-01&dataFim=2026-04-30&page=1
 logisticaRouter.get('/execucoes', async (req: Request, res: Response, next: NextFunction) => {
   try {

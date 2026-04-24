@@ -76,6 +76,18 @@ function rotaToDto(row: RotaRow): RotaDto {
   };
 }
 
+const EXECUCAO_SELECT = `
+  *,
+  pedidos(numero, tipo, data_programada, hora_programada, data_desejada, observacao,
+    clientes(nome, telefone),
+    obras(nome),
+    enderecos_entrega:enderecos_entrega(endereco, numero, bairro, cidade),
+    cacambas(descricao)
+  ),
+  motoristas(id, nome, celular),
+  veiculos(id, placa, modelo)
+`;
+
 // ─── Execuções ────────────────────────────────────────────────────────────────
 
 export async function listarExecucoes(query: ListExecucoesQuery): Promise<ExecucaoDto[] | ListExecucoesResult> {
@@ -86,17 +98,7 @@ export async function listarExecucoes(query: ListExecucoesQuery): Promise<Execuc
 
   let q = supabaseAdmin
     .from('execucoes')
-    .select(`
-      *,
-      pedidos(numero, tipo, data_programada, hora_programada, data_desejada, observacao,
-        clientes(nome, telefone),
-        obras(nome),
-        enderecos_entrega:enderecos_entrega(endereco, numero, bairro, cidade),
-        cacambas(descricao)
-      ),
-      motoristas(id, nome, celular),
-      veiculos(id, placa, modelo)
-    `, isPaginado ? { count: 'exact' } : undefined)
+    .select(EXECUCAO_SELECT, isPaginado ? { count: 'exact' } : undefined)
     .order('created_at', { ascending: false });
 
   if (query.status)        q = q.eq('status', query.status);
@@ -124,21 +126,53 @@ export async function listarExecucoes(query: ListExecucoesQuery): Promise<Execuc
 export async function buscarExecucaoPorId(id: number): Promise<ExecucaoDto> {
   const { data, error } = await supabaseAdmin
     .from('execucoes')
-    .select(`
-      *,
-      pedidos(numero, tipo, data_programada, hora_programada, data_desejada, observacao,
-        clientes(nome, telefone),
-        obras(nome),
-        enderecos_entrega:enderecos_entrega(endereco, numero, bairro, cidade),
-        cacambas(descricao)
-      ),
-      motoristas(id, nome, celular),
-      veiculos(id, placa, modelo)
-    `)
+    .select(EXECUCAO_SELECT)
     .eq('id', id)
     .single();
 
   if (error || !data) throw new Error('Execução não encontrada.');
+  return execucaoToDto(data as ExecucaoRow);
+}
+
+export async function criarExecucao(
+  pedidoId: number,
+  tipo: string,
+  motoristaId?: number,
+  veiculoId?: number,
+): Promise<ExecucaoDto> {
+  const { data: pedido, error: pedidoErr } = await supabaseAdmin
+    .from('pedidos')
+    .select('id')
+    .eq('id', pedidoId)
+    .is('deleted_at', null)
+    .single();
+  if (pedidoErr || !pedido) throw new Error('Pedido não encontrado.');
+
+  const { data: existing } = await supabaseAdmin
+    .from('execucoes')
+    .select('id')
+    .eq('pedido_id', pedidoId)
+    .eq('tipo', tipo)
+    .in('status', ['pendente', 'em_rota', 'no_local', 'executando'])
+    .maybeSingle();
+  if (existing) throw new Error('Já existe uma OS ativa para este pedido e tipo de serviço.');
+
+  const { data, error } = await supabaseAdmin
+    .from('execucoes')
+    .insert({
+      pedido_id:    pedidoId,
+      tipo,
+      status:       'pendente',
+      motorista_id: motoristaId ?? null,
+      veiculo_id:   veiculoId   ?? null,
+    })
+    .select(EXECUCAO_SELECT)
+    .single();
+
+  if (error || !data) {
+    console.error('[criarExecucao] supabase error:', error);
+    throw new Error('Falha ao criar OS.');
+  }
   return execucaoToDto(data as ExecucaoRow);
 }
 
@@ -173,17 +207,7 @@ export async function atribuirExecucao(id: number, dto: AtribuirExecucaoDto): Pr
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
-    .select(`
-      *,
-      pedidos(numero, tipo, data_programada, hora_programada, data_desejada, observacao,
-        clientes(nome, telefone),
-        obras(nome),
-        enderecos_entrega:enderecos_entrega(endereco, numero, bairro, cidade),
-        cacambas(descricao)
-      ),
-      motoristas(id, nome, celular),
-      veiculos(id, placa, modelo)
-    `)
+    .select(EXECUCAO_SELECT)
     .single();
 
   if (error || !data) throw new Error('Falha ao atribuir execução.');
@@ -212,17 +236,7 @@ export async function atualizarStatusExecucao(id: number, dto: UpdateStatusExecu
     .from('execucoes')
     .update(updates)
     .eq('id', id)
-    .select(`
-      *,
-      pedidos(numero, tipo, data_programada, hora_programada, data_desejada, observacao,
-        clientes(nome, telefone),
-        obras(nome),
-        enderecos_entrega:enderecos_entrega(endereco, numero, bairro, cidade),
-        cacambas(descricao)
-      ),
-      motoristas(id, nome, celular),
-      veiculos(id, placa, modelo)
-    `)
+    .select(EXECUCAO_SELECT)
     .single();
 
   if (error || !data) throw new Error('Falha ao atualizar status da execução.');

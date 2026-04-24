@@ -417,6 +417,18 @@ export function useRotas(params?: { data?: string; motoristaId?: number; status?
   });
 }
 
+export function useCreateExecucao() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { pedidoId: number; tipo: string; motoristaId?: number; veiculoId?: number }) =>
+      api.criarExecucao(dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['execucoes'] });
+      qc.invalidateQueries({ queryKey: ['pedidos'] });
+    },
+  });
+}
+
 export function useAtribuirExecucao() {
   const qc = useQueryClient();
   return useMutation({

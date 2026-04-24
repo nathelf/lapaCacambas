@@ -68,6 +68,18 @@
     /* Header */
     --header-height: 56px;
 
+    /* Brand alias (mesmo valor de --primary) */
+    --brand: var(--primary);
+    --brand-foreground: var(--primary-foreground);
+    --brand-deep: 222 47% 11%;
+
+    /* OS module — semáforo de status */
+    --status-os-pending:   38  92% 50%;
+    --status-os-transit:  199  89% 48%;
+    --status-os-delivered:142  71% 45%;
+    --status-os-collected:215  16% 47%;
+    --status-os-critical:   0  84% 60%;
+
     /* Status colors */
     --status-orcamento: 220 10% 46%;
     --status-programado: 217 72% 45%;
@@ -196,6 +208,16 @@
 .animate-fade-in-up  { animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-fade-in     { animation: fade-in 0.4s ease-out both; }
 .animate-pulse-glow  { animation: pulse-glow 3s ease-in-out infinite; }
+
+/* OS module shadows */
+@layer utilities {
+  .shadow-soft {
+    box-shadow: 0 1px 2px hsl(var(--foreground)/0.04), 0 1px 3px hsl(var(--foreground)/0.06);
+  }
+  .shadow-soft-md {
+    box-shadow: 0 2px 4px hsl(var(--foreground)/0.04), 0 4px 12px hsl(var(--foreground)/0.06);
+  }
+}
 
 /* Login page — gradient utilities */
 @layer utilities {

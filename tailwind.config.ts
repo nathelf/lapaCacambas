@@ -64,6 +64,16 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        brand: {
+          DEFAULT: "hsl(var(--brand))",
+          foreground: "hsl(var(--brand-foreground))",
+          deep: "hsl(var(--brand-deep))",
+        },
+        "status-os-pending":   "hsl(var(--status-os-pending))",
+        "status-os-transit":   "hsl(var(--status-os-transit))",
+        "status-os-delivered": "hsl(var(--status-os-delivered))",
+        "status-os-collected": "hsl(var(--status-os-collected))",
+        "status-os-critical":  "hsl(var(--status-os-critical))",
         sidebar: {
           bg: "hsl(var(--sidebar-bg))",
           fg: "hsl(var(--sidebar-fg))",

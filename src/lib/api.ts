@@ -642,6 +642,13 @@ export async function fetchExecucoes(params?: { status?: string; data?: string; 
   return backendRequest<any[] | { data: any[]; total: number }>(`/api/logistica/execucoes?${qs}`);
 }
 
+export async function criarExecucao(dto: { pedidoId: number; tipo: string; motoristaId?: number; veiculoId?: number }) {
+  return backendRequest<any>('/api/logistica/execucoes', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
 export async function atribuirExecucao(id: number, motoristaId: number, veiculoId: number) {
   return backendRequest<any>(`/api/logistica/execucoes/${id}/atribuir`, {
     method: 'PUT',
