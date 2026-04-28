@@ -201,6 +201,39 @@ export function useUpdateBoletoStatus() {
   });
 }
 
+// ===== CACAMBAS CRUD =====
+
+export function useCreateCacamba() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: api.CacambaFormDto) => api.createCacamba(dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cacambas'] });
+      qc.invalidateQueries({ queryKey: ['frota'] });
+    },
+  });
+}
+
+export function useUpdateCacamba() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dto }: { id: number; dto: Partial<api.CacambaFormDto> }) =>
+      api.updateCacamba(id, dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cacambas'] });
+      qc.invalidateQueries({ queryKey: ['frota'] });
+    },
+  });
+}
+
+export function useDeleteCacamba() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.deleteCacamba(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['cacambas'] }),
+  });
+}
+
 // ===== LOOKUP DATA =====
 export function useCacambas() {
   return useQuery({ queryKey: ['cacambas'], queryFn: api.fetchCacambas });
@@ -590,6 +623,23 @@ export function useUnidadesDisponiveis(options?: { enabled?: boolean }) {
     queryFn:  api.fetchUnidadesDisponiveis,
     staleTime: 10_000,
     enabled,
+  });
+}
+
+export function useFrota() {
+  return useQuery({
+    queryKey: ['frota'],
+    queryFn:  api.fetchFrota,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useUnidadeTimeline(unidadeId: number | undefined) {
+  return useQuery({
+    queryKey: ['unidade-timeline', unidadeId],
+    queryFn:  () => api.fetchUnidadeTimeline(unidadeId!),
+    enabled:  !!unidadeId,
+    staleTime: 10_000,
   });
 }
 

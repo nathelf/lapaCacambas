@@ -196,6 +196,23 @@ logisticaRouter.post('/unidades/:id/sair-manutencao', async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
+// GET /api/logistica/unidades/:id/timeline  — histórico de movimentações de uma unidade física
+logisticaRouter.get('/unidades/:id/timeline', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    const data = await cacamba.buscarTimelineUnidade(id);
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
+// GET /api/logistica/frota  — todas as unidades com última localização GPS
+logisticaRouter.get('/frota', async (req, res, next) => {
+  try {
+    const data = await cacamba.listarFrota();
+    res.json(data);
+  } catch (err) { next(err); }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 // PUT /api/logistica/execucoes/:id/status

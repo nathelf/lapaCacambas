@@ -99,6 +99,16 @@ export async function atualizarCacamba(id: number, dto: UpdateCacambaDto): Promi
   return toCacambaDto(data as CacambaRow);
 }
 
+export async function deletarCacamba(id: number): Promise<void> {
+  // Soft-delete: marca como inativa em vez de apagar
+  const { error } = await supabaseAdmin
+    .from('cacambas')
+    .update({ ativo: false, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) throw new Error('Falha ao desativar caçamba.');
+}
+
 // ─── Unidades físicas ─────────────────────────────────────────────────────────
 
 export async function listarUnidades(query: ListUnidadesQuery): Promise<UnidadeCacambaDto[]> {

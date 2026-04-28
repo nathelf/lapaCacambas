@@ -159,6 +159,31 @@ export async function fetchCacambas() {
   return backendRequest<any[]>('/api/cacambas?ativo=true');
 }
 
+export interface CacambaFormDto {
+  descricao: string;
+  capacidade?: string;
+  precoDia: number;
+  precoSemana: number;
+  precoQuinzena: number;
+  precoMes: number;
+}
+
+export function createCacamba(dto: CacambaFormDto) {
+  return backendRequest<any>('/api/cacambas', {
+    method: 'POST', body: JSON.stringify(dto),
+  });
+}
+
+export function updateCacamba(id: number, dto: Partial<CacambaFormDto>) {
+  return backendRequest<any>(`/api/cacambas/${id}`, {
+    method: 'PUT', body: JSON.stringify(dto),
+  });
+}
+
+export function deleteCacamba(id: number) {
+  return backendRequest<void>(`/api/cacambas/${id}`, { method: 'DELETE' });
+}
+
 // ===== SERVICOS =====
 export async function fetchServicos() {
   return backendRequest<any[]>('/api/servicos');
@@ -820,6 +845,29 @@ export function sairManutencao(unidadeId: number) {
   return backendRequest<{ ok: boolean }>(`/api/logistica/unidades/${unidadeId}/sair-manutencao`, {
     method: 'POST', body: JSON.stringify({}),
   });
+}
+
+/** Tipo de unidade enriquecida com última GPS — usado no mapa da frota. */
+export interface FrotaUnidade {
+  id: number;
+  codigo_patrimonio: string;
+  status: string;
+  ultima_atualizacao: string | null;
+  cliente_atual: string | null;
+  endereco_atual: string | null;
+  lat: number | null;
+  lng: number | null;
+  tipo: { descricao: string; capacidade_m3: number } | null;
+  cliente: { nome: string } | null;
+  obra: null;
+}
+
+export function fetchFrota() {
+  return backendRequest<FrotaUnidade[]>('/api/logistica/frota');
+}
+
+export function fetchUnidadeTimeline(unidadeId: number) {
+  return backendRequest<any[]>(`/api/logistica/unidades/${unidadeId}/timeline`);
 }
 
 export async function removerParadaRota(rotaId: number, paradaId: number) {

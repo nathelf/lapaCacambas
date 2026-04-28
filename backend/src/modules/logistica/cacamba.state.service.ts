@@ -327,6 +327,123 @@ export async function buscarTimeline(execucaoId: number) {
   }));
 }
 
+// ── 8b. TIMELINE DE UMA UNIDADE FÍSICA ───────────────────────────────────────
+
+export async function buscarTimelineUnidade(unidadeCacambaId: number) {
+  const { data, error } = await supabaseAdmin
+    .from('movimentacoes_cacamba')
+    .select(`
+      id, tipo, status_anterior, status_novo,
+      latitude, longitude, foto_url, observacao, created_at,
+      motoristas(nome),
+      execucoes(pedido_id, pedidos(numero, clientes(nome)))
+    `)
+    .eq('unidade_cacamba_id', unidadeCacambaId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  if (error) throw new Error('Falha ao buscar timeline da unidade.');
+  return (data ?? []).map((m: any) => ({
+    id:             m.id,
+    tipo:           m.tipo,
+    statusAnterior: m.status_anterior,
+    statusNovo:     m.status_novo,
+    motoristaNome:  m.motoristas?.nome ?? null,
+    pedidoNumero:   m.execucoes?.pedidos?.numero ?? null,
+    clienteNome:    m.execucoes?.pedidos?.clientes?.nome ?? null,
+    latitude:       m.latitude,
+    longitude:      m.longitude,
+    fotoUrl:        m.foto_url,
+    observacao:     m.observacao,
+    createdAt:      m.created_at,
+  }));
+}
+
+// ── 8c. HISTÓRICO DO MOTORISTA HOJE ──────────────────────────────────────────
+
+export async function historicoDoMotoristaHoje(userId: string) {
+  const { data: motorista } = await supabaseAdmin
+    .from('motoristas').select('id').eq('user_id', userId).single();
+
+  if (!motorista) throw new Error('Perfil de motorista não encontrado.');
+
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  const { data, error } = await supabaseAdmin
+    .from('movimentacoes_cacamba')
+    .select(`
+      id, tipo, status_novo, latitude, longitude, foto_url, observacao, created_at,
+      unidades_cacamba(patrimonio)
+    `)
+    .eq('motorista_id', motorista.id)
+    .gte('created_at', `${hoje}T00:00:00Z`)
+    .lte('created_at', `${hoje}T23:59:59Z`)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error('Falha ao buscar histórico do dia.');
+  return (data ?? []).map((m: any) => ({
+    id:         m.id,
+    tipo:       m.tipo,
+    statusNovo: m.status_novo,
+    patrimonio: m.unidades_cacamba?.patrimonio ?? null,
+    latitude:   m.latitude,
+    longitude:  m.longitude,
+    fotoUrl:    m.foto_url,
+    observacao: m.observacao,
+    createdAt:  m.created_at,
+  }));
+}
+
+// ── 9b. FROTA ENRIQUECIDA (admin) ─────────────────────────────────────────────
+
+export async function listarFrota() {
+  const { data: unidades, error } = await supabaseAdmin
+    .from('unidades_cacamba')
+    .select(`
+      id, patrimonio, status, cliente_atual, observacao, updated_at,
+      cacambas(descricao, capacidade)
+    `)
+    .order('patrimonio');
+
+  if (error) throw new Error('Falha ao listar frota.');
+
+  // Para cada unidade, busca última movimentação com coordenadas
+  const ids = (unidades ?? []).map((u: any) => u.id);
+  const { data: movs } = await supabaseAdmin
+    .from('movimentacoes_cacamba')
+    .select('unidade_cacamba_id, latitude, longitude, observacao, created_at')
+    .in('unidade_cacamba_id', ids)
+    .not('latitude', 'is', null)
+    .order('created_at', { ascending: false });
+
+  // Agrega: última coordenada por unidade
+  const lastCoord: Record<number, { lat: number; lng: number; obs: string | null }> = {};
+  for (const m of (movs ?? []) as any[]) {
+    if (!lastCoord[m.unidade_cacamba_id]) {
+      lastCoord[m.unidade_cacamba_id] = {
+        lat: m.latitude, lng: m.longitude, obs: m.observacao,
+      };
+    }
+  }
+
+  return (unidades ?? []).map((u: any) => ({
+    id:                u.id,
+    codigo_patrimonio: u.patrimonio,
+    status:            u.status,
+    ultima_atualizacao: u.updated_at,
+    cliente_atual:     u.cliente_atual ?? null,
+    endereco_atual:    lastCoord[u.id]?.obs ?? null,
+    lat:               lastCoord[u.id]?.lat ?? null,
+    lng:               lastCoord[u.id]?.lng ?? null,
+    tipo: u.cacambas ? {
+      descricao:     u.cacambas.descricao,
+      capacidade_m3: parseFloat(u.cacambas.capacidade ?? '0') || 0,
+    } : null,
+    cliente: u.cliente_atual ? { nome: u.cliente_atual } : null,
+    obra:    null,
+  }));
+}
+
 // ── 8. OS DO MOTORISTA (hoje) ─────────────────────────────────────────────────
 
 export type MinhasOsResult = {
@@ -474,7 +591,7 @@ export async function historicoDiaMotorista(userId: string): Promise<HistoricoDi
 
 // ── 9. UNIDADES DISPONÍVEIS ───────────────────────────────────────────────────
 
-export async function listarUnidadesDisponiveis(tenantId: string) {
+export async function listarUnidadesDisponiveis(_tenantId: string) {
   const { data, error } = await supabaseAdmin
     .from('unidades_cacamba')
     .select('id, patrimonio, status, observacao, cacambas(descricao, capacidade)')

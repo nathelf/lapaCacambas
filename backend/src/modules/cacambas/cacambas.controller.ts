@@ -78,6 +78,18 @@ cacambasRouter.post('/', async (req: Request, res: Response, next: NextFunction)
   }
 });
 
+// DELETE /api/cacambas/:id  (soft-delete — marca como inativo)
+cacambasRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) { res.status(400).json({ message: 'ID inválido.' }); return; }
+    await cacambasService.deletarCacamba(id);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
 // PUT /api/cacambas/:id
 cacambasRouter.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
