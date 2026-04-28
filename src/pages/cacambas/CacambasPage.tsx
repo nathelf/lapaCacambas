@@ -43,17 +43,24 @@ export default function CacambasPage() {
     return () => clearTimeout(t);
   }, [search]);
 
+  const normBusca = (s: string) =>
+    s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
   // ── IDs com match — compartilhados entre tabela e mapa ───────────────────
   const highlightedIds = useMemo(() => {
     if (!debouncedSearch) return new Set<number>();
-    const q = debouncedSearch.toLowerCase();
+    const q = normBusca(debouncedSearch);
+    const str = (v: unknown) => normBusca(String(v ?? ''));
     return new Set(
       unidades
         .filter(u =>
-          u.codigo_patrimonio.toLowerCase().includes(q) ||
-          (u.cliente?.nome     ?? '').toLowerCase().includes(q) ||
-          (u.endereco_atual    ?? '').toLowerCase().includes(q) ||
-          (u.tipo?.descricao   ?? '').toLowerCase().includes(q),
+          str(u.codigo_patrimonio).includes(q) ||
+          str((u as { cliente_atual?: string }).cliente_atual).includes(q) ||
+          str(u.cliente?.nome).includes(q) ||
+          str(u.endereco_atual).includes(q) ||
+          str(u.tipo?.descricao).includes(q) ||
+          str((u.obra as { bairro?: string } | null)?.bairro).includes(q) ||
+          (Number.isFinite(Number(debouncedSearch)) && u.id === Number(debouncedSearch)),
         )
         .map(u => u.id),
     );
@@ -196,7 +203,7 @@ export default function CacambasPage() {
             unidades={unidades}
             height={360}
             onSelect={setSelected}
-            highlightedIds={highlightedIds.size > 0 ? highlightedIds : undefined}
+            highlightedIds={debouncedSearch ? highlightedIds : undefined}
           />
         </div>
       </Card>

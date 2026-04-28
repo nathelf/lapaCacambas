@@ -77,6 +77,13 @@ export enum StatusVeiculo {
   INDISPONIVEL = 'indisponivel',
 }
 
+export const STATUS_VEICULO_LABELS: Record<StatusVeiculo, string> = {
+  [StatusVeiculo.DISPONIVEL]: 'Disponível',
+  [StatusVeiculo.EM_OPERACAO]: 'Em operação',
+  [StatusVeiculo.MANUTENCAO]: 'Manutenção',
+  [StatusVeiculo.INDISPONIVEL]: 'Indisponível',
+};
+
 // ─── Motoristas ───────────────────────────────────────────────────────────────
 
 export enum StatusMotorista {

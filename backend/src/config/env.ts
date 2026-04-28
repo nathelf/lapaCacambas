@@ -14,6 +14,7 @@ export const env = {
   supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
   supabaseAnonKey: required('SUPABASE_ANON_KEY'),
   bancoWebhookSecret: process.env.BANCO_WEBHOOK_SECRET || '',
+  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_MAPS_API_KEY || '',
 
   // ── Fiscal (opcionais — sobrescrevem config do banco em dev/CI) ────────────
   fiscal: {

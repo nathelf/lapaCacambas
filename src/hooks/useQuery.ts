@@ -383,6 +383,67 @@ export function useVeiculosAll() {
   return useQuery({ queryKey: ['veiculos-all'], queryFn: api.fetchVeiculosAll });
 }
 
+export function useCreateVeiculo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: Record<string, unknown>) => api.createVeiculo(dto),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['veiculos-all'] });
+      void qc.invalidateQueries({ queryKey: ['veiculos'] });
+    },
+  });
+}
+
+export function useUpdateVeiculo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) => api.updateVeiculo(id, data),
+    onMutate: async ({ id, data }) => {
+      await qc.cancelQueries({ queryKey: ['veiculos-all'] });
+      const prev = qc.getQueryData<unknown[]>(['veiculos-all']);
+      if (prev) {
+        qc.setQueryData(
+          ['veiculos-all'],
+          prev.map((row: any) => (row.id === id ? { ...row, ...data } : row)),
+        );
+      }
+      return { prev } as { prev: unknown[] | undefined };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['veiculos-all'], ctx.prev);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['veiculos-all'] });
+      void qc.invalidateQueries({ queryKey: ['veiculos'] });
+    },
+  });
+}
+
+export function useDeleteVeiculo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.deleteVeiculo(id),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: ['veiculos-all'] });
+      const prev = qc.getQueryData<unknown[]>(['veiculos-all']);
+      if (prev) {
+        qc.setQueryData(
+          ['veiculos-all'],
+          prev.filter((row: any) => row.id !== id),
+        );
+      }
+      return { prev } as { prev: unknown[] | undefined };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['veiculos-all'], ctx.prev);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['veiculos-all'] });
+      void qc.invalidateQueries({ queryKey: ['veiculos'] });
+    },
+  });
+}
+
 export function useServicos() {
   return useQuery({ queryKey: ['servicos'], queryFn: api.fetchServicos });
 }
@@ -523,7 +584,7 @@ export function useOrdensServico(params?: { status?: string; dataInicio?: string
   });
 }
 
-export function useRotas(params?: { data?: string; motoristaId?: number; status?: string }) {
+export function useRotas(params?: { data?: string; dataInicio?: string; dataFim?: string; motoristaId?: number; status?: string }) {
   return useQuery({
     queryKey: ['rotas', params],
     queryFn: () => api.fetchRotas(params),
@@ -582,6 +643,14 @@ export function useStatusRota() {
   });
 }
 
+export function useRotaUpdateDate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: string }) => api.atualizarDataRota(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['rotas'] }),
+  });
+}
+
 export function useAdicionarParada() {
   const qc = useQueryClient();
   return useMutation({
@@ -591,6 +660,12 @@ export function useAdicionarParada() {
       qc.invalidateQueries({ queryKey: ['rotas'] });
       qc.invalidateQueries({ queryKey: ['execucoes'] });
     },
+  });
+}
+
+export function useOtimizarRota() {
+  return useMutation({
+    mutationFn: (dto: api.RouteOptimizationRequest) => api.otimizarRota(dto),
   });
 }
 

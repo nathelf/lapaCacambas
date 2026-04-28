@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search, Plus, MapPin, Truck, Trash2,
@@ -657,6 +657,10 @@ function NovaOSModal({ open, onClose, onConfirm, isPending }: {
 
   const canConfirm = selectedPedido && tipo && !isPending;
 
+  useEffect(() => {
+    if (!open) reset();
+  }, [open]);
+
   return (
     <Dialog open={open} onOpenChange={o => !o && handleClose()}>
       <DialogContent className="sm:max-w-md">
@@ -670,14 +674,24 @@ function NovaOSModal({ open, onClose, onConfirm, isPending }: {
           <div className="space-y-1.5">
             <Label className="text-xs">Pedido</Label>
             {selectedPedido ? (
-              <div className="flex items-center justify-between px-3 py-2 rounded-md border border-border bg-muted/30 text-sm">
-                <div>
+              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-md border border-border bg-muted/30 text-sm">
+                <div className="min-w-0">
                   <span className="font-semibold">{selectedPedido.numero ?? `PED-${selectedPedido.id}`}</span>
                   <span className="text-muted-foreground ml-2">{selectedPedido.clienteNome ?? selectedPedido.cliente?.nome ?? '—'}</span>
                 </div>
-                <button onClick={() => setSelectedPedido(null)} className="text-muted-foreground hover:text-foreground">
-                  <X className="h-3.5 w-3.5" />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => {
+                      setSelectedPedido(null);
+                      setPedidoSearch('');
+                    }}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="Limpar pedido selecionado"
+                    type="button"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-2">

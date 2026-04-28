@@ -113,7 +113,10 @@ export interface FleetMapProps {
   unidades: Unidade[];
   height?: number;
   onSelect?: (u: Unidade) => void;
-  /** IDs das unidades que correspondem ao termo de busca. Vazio = sem filtro ativo. */
+  /**
+   * Quando definido, a busca na página de caçambas está ativa (pode ser Set vazio = 0 resultados).
+   * `undefined` = sem busca — todos os pins no estado normal.
+   */
   highlightedIds?: Set<number>;
 }
 
@@ -248,34 +251,54 @@ export function FleetMap({ unidades, height = 420, onSelect, highlightedIds }: F
           bounds.push([u.lat!, u.lng!]);
         });
 
-      if (bounds.length > 0 && !selected) {
+      const buscaNoMapa = highlightedIds !== undefined && highlightedIds !== null;
+      if (bounds.length > 0 && !selected && !buscaNoMapa) {
         mapRef.current?.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapReady, unidades]);
+  }, [mapReady, unidades, highlightedIds]);
 
   // ── Atualiza ícones: seleção + resultado de busca (sem recriar markers) ─────
   useEffect(() => {
     if (!mapReady) return;
     import('leaflet').then((L: any) => {
-      const hasSearch = !!highlightedIds && highlightedIds.size > 0;
+      const buscaAtiva = highlightedIds !== undefined && highlightedIds !== null;
+      const temMatch   = buscaAtiva && highlightedIds.size > 0;
       markersMap.current.forEach((marker, id) => {
         const u = unidades.find(u => u.id === id);
         if (!u) return;
         const eff    = statusEfetivo(u.status, u.ultima_atualizacao);
         const colors = STATUS_COLORS[eff] ?? STATUS_COLORS.disponivel;
         const isSel    = selected?.id === id;
-        const isMatch  = !hasSearch || (highlightedIds!.has(id));
+        const noBusca  = !buscaAtiva;
+        const isMatch  = noBusca || highlightedIds.has(id);
         marker.setIcon(makeBinIcon(
           L, colors.fill, colors.stroke,
           isSel,
-          hasSearch && isMatch && !isSel,   // searchMatch
-          hasSearch && !isMatch,            // dimmed
+          buscaAtiva && temMatch && isMatch && !isSel,
+          buscaAtiva && !isMatch,
         ));
       });
     });
   }, [selected, highlightedIds, mapReady, unidades]);
+
+  // ── Busca com resultados: aproxima o mapa dos pins que batem com o termo ─────
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || highlightedIds === undefined) return;
+    if (highlightedIds.size === 0) return;
+    const coords: [number, number][] = [];
+    for (const u of unidades) {
+      if (u.lat != null && u.lng != null && highlightedIds.has(u.id)) {
+        coords.push([u.lat, u.lng]);
+      }
+    }
+    if (coords.length === 0) return;
+    import('leaflet').then((L: any) => {
+      const b = L.latLngBounds(coords);
+      mapRef.current.fitBounds(b, { padding: [52, 52], maxZoom: 16, animate: true });
+    });
+  }, [highlightedIds, mapReady, unidades]);
 
   const handleClose = useCallback(() => setSelected(null), []);
 

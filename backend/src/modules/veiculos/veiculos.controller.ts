@@ -51,3 +51,20 @@ veiculosRouter.put('/:id', async (req: Request, res: Response, next: NextFunctio
     next(err);
   }
 });
+
+// DELETE /api/veiculos/:id
+veiculosRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = Number(req.params.id);
+    if (isNaN(id)) { res.status(400).json({ message: 'ID inválido.' }); return; }
+
+    await veiculosService.excluir(id);
+    res.status(204).send();
+  } catch (err: any) {
+    if (typeof err?.message === 'string' && err.message.includes('não pode ser excluído')) {
+      res.status(409).json({ message: err.message });
+      return;
+    }
+    next(err);
+  }
+});

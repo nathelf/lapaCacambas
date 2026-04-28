@@ -102,3 +102,17 @@ export async function atualizar(id: number, dto: UpdateVeiculoDto): Promise<Veic
   if (error || !data) throw new Error('Falha ao atualizar veículo.');
   return toDto(data as VeiculoRow);
 }
+
+export async function excluir(id: number): Promise<void> {
+  const { error } = await supabaseAdmin.from('veiculos').delete().eq('id', id);
+  if (error) {
+    const code = (error as { code?: string }).code;
+    const msg = (error as { message?: string }).message ?? '';
+    if (code === '23503' || msg.toLowerCase().includes('foreign key') || msg.includes('violates foreign key')) {
+      throw new Error(
+        'Este veículo não pode ser excluído porque está vinculado a pedidos, rotas ou execuções. Remova os vínculos ou marque como indisponível.',
+      );
+    }
+    throw new Error('Falha ao excluir veículo.');
+  }
+}

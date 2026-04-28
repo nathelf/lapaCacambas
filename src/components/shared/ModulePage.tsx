@@ -8,9 +8,27 @@ interface ModulePageProps {
   showCreate?: boolean;
   createLabel?: string;
   children?: React.ReactNode;
+  onCreateClick?: () => void;
+  searchPlaceholder?: string;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  hideFiltersButton?: boolean;
 }
 
-export function ModulePage({ title, subtitle, showCreate = true, createLabel = 'Novo', children }: ModulePageProps) {
+export function ModulePage({
+  title,
+  subtitle,
+  showCreate = true,
+  createLabel = 'Novo',
+  children,
+  onCreateClick,
+  searchPlaceholder = 'Buscar...',
+  searchValue,
+  onSearchChange,
+  hideFiltersButton = false,
+}: ModulePageProps) {
+  const searchControlled = onSearchChange != null;
+
   return (
     <div className="space-y-6 animate-fade-in-up">
       <PageHeader
@@ -18,7 +36,7 @@ export function ModulePage({ title, subtitle, showCreate = true, createLabel = '
         subtitle={subtitle}
         actions={
           showCreate ? (
-            <Button size="sm">
+            <Button size="sm" type="button" onClick={onCreateClick}>
               <Plus className="w-4 h-4 mr-1" />
               {createLabel}
             </Button>
@@ -32,14 +50,19 @@ export function ModulePage({ title, subtitle, showCreate = true, createLabel = '
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Buscar..."
+            placeholder={searchPlaceholder}
             className="w-full h-9 pl-9 pr-3 rounded-md border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            {...(searchControlled
+              ? { value: searchValue ?? '', onChange: e => onSearchChange(e.target.value) }
+              : {})}
           />
         </div>
-        <Button variant="outline" size="sm">
-          <Filter className="w-4 h-4 mr-1" />
-          Filtros
-        </Button>
+        {!hideFiltersButton && (
+          <Button variant="outline" size="sm" type="button">
+            <Filter className="w-4 h-4 mr-1" />
+            Filtros
+          </Button>
+        )}
       </div>
 
       {children || (

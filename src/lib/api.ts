@@ -263,6 +263,24 @@ export async function fetchVeiculosAll() {
   return backendRequest<any[]>('/api/veiculos');
 }
 
+export async function createVeiculo(dto: Record<string, unknown>) {
+  return backendRequest<any>('/api/veiculos', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function updateVeiculo(id: number, dto: Record<string, unknown>) {
+  return backendRequest<any>(`/api/veiculos/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(dto),
+  });
+}
+
+export async function deleteVeiculo(id: number) {
+  await backendRequest<unknown>(`/api/veiculos/${id}`, { method: 'DELETE' });
+}
+
 // ===== PEDIDOS =====
 export async function fetchPedidos(filters?: {
   status?: string;
@@ -736,9 +754,11 @@ export async function atualizarStatusExecucao(id: number, status: string, extra?
   });
 }
 
-export async function fetchRotas(params?: { data?: string; motoristaId?: number; status?: string }) {
+export async function fetchRotas(params?: { data?: string; dataInicio?: string; dataFim?: string; motoristaId?: number; status?: string }) {
   const qs = new URLSearchParams();
   if (params?.data)        qs.set('data', params.data);
+  if (params?.dataInicio)  qs.set('dataInicio', params.dataInicio);
+  if (params?.dataFim)     qs.set('dataFim', params.dataFim);
   if (params?.motoristaId) qs.set('motoristaId', String(params.motoristaId));
   if (params?.status)      qs.set('status', params.status);
   return backendRequest<any[]>(`/api/logistica/rotas?${qs}`);
@@ -762,8 +782,65 @@ export async function atualizarStatusRota(id: number, status: string) {
   });
 }
 
+export async function atualizarDataRota(id: number, data: string) {
+  return backendRequest<any>(`/api/logistica/rotas/${id}/data`, {
+    method: 'PUT',
+    body: JSON.stringify({ data }),
+  });
+}
+
 export async function adicionarParadaRota(rotaId: number, dto: { pedidoId?: number; ordem: number; endereco?: string; tipo?: string }) {
   return backendRequest<any>(`/api/logistica/rotas/${rotaId}/paradas`, {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+}
+
+export type RouteOptimizationRequest = {
+  origem: { lat: number; lng: number; label?: string };
+  destino: { lat: number; lng: number; label?: string };
+  veiculoId?: number;
+  veiculoTipo?: string;
+  dieselPreco?: number;
+  custoManutencaoKm?: number;
+  custoHoraOperacao?: number;
+  consumoKmLitro?: number;
+  valorLocacao?: number;
+};
+
+export type RouteOptionResult = {
+  id: string;
+  nome: 'mais_rapida' | 'mais_curta' | 'economica';
+  durationSec: number;
+  distanceMeters: number;
+  fuelLiters: number;
+  custoDiesel: number;
+  custoManutencao: number;
+  custoOperacional: number;
+  custoTotal: number;
+  margemBruta: number | null;
+  margemPercentual: number | null;
+  warnings: string[];
+  polyline: { encoded: string; points: Array<{ lat: number; lng: number }> };
+};
+
+export type RouteOptimizationResult = {
+  origem: { lat: number; lng: number; label?: string };
+  destino: { lat: number; lng: number; label?: string };
+  opcoes: RouteOptionResult[];
+  sugestaoId: string;
+  deepLinks: { googleMaps: string; waze: string };
+  premissas: {
+    dieselPreco: number;
+    consumoKmLitro: number;
+    custoManutencaoKm: number;
+    custoHoraOperacao: number;
+    valorLocacao: number | null;
+  };
+};
+
+export async function otimizarRota(dto: RouteOptimizationRequest) {
+  return backendRequest<RouteOptimizationResult>('/api/logistica/rotas/otimizar', {
     method: 'POST',
     body: JSON.stringify(dto),
   });

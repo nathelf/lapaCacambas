@@ -238,9 +238,24 @@ logisticaRouter.get('/rotas', async (req: Request, res: Response, next: NextFunc
   try {
     const data = await svc.listarRotas({
       data: req.query.data as string | undefined,
+      dataInicio: req.query.dataInicio as string | undefined,
+      dataFim: req.query.dataFim as string | undefined,
       motoristaId: req.query.motoristaId ? Number(req.query.motoristaId) : undefined,
       status: req.query.status as any,
     });
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/logistica/rotas/:id/data
+logisticaRouter.put('/rotas/:id/data', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = Number(req.params.id);
+    const dataRota = String(req.body?.data ?? '');
+    if (isNaN(id) || !dataRota) { res.status(400).json({ message: 'id e data são obrigatórios.' }); return; }
+    const data = await svc.atualizarDataRota(id, dataRota);
     res.json(data);
   } catch (err) {
     next(err);
@@ -318,6 +333,21 @@ logisticaRouter.delete('/rotas/:id/paradas/:paradaId', async (req: Request, res:
     await svc.removerParada(rotaId, paradaId);
     res.status(204).send();
   } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/logistica/rotas/otimizar
+logisticaRouter.post('/rotas/otimizar', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user?.id ?? '';
+    const data = await svc.otimizarRotaInteligente(req.body, userId);
+    res.json(data);
+  } catch (err: any) {
+    if (typeof err?.message === 'string' && err.message.includes('GOOGLE_MAPS_API_KEY')) {
+      res.status(503).json({ message: err.message });
+      return;
+    }
     next(err);
   }
 });

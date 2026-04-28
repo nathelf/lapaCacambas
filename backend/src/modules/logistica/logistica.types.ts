@@ -20,13 +20,37 @@ export interface ExecucaoRow {
   pedidos?: {
     numero: string;
     tipo: string;
+    valor_total?: number | null;
     data_programada: string | null;
     hora_programada: string | null;
     data_desejada: string | null;
     observacao: string | null;
-    clientes?: { nome: string; telefone: string | null };
-    obras?: { nome: string };
-    enderecos_entrega?: { endereco: string; numero: string | null; bairro: string | null; cidade: string | null };
+    clientes?: {
+      nome: string;
+      telefone: string | null;
+      endereco?: string | null;
+      numero?: string | null;
+      complemento?: string | null;
+      cep?: string | null;
+      bairro?: string | null;
+      cidade?: string | null;
+      estado?: string | null;
+    };
+    obras?: {
+      nome: string;
+      endereco?: string | null;
+      numero?: string | null;
+      bairro?: string | null;
+      cidade?: string | null;
+      estado?: string | null;
+    };
+    enderecos_entrega?: {
+      endereco: string | null;
+      numero: string | null;
+      bairro: string | null;
+      cidade: string | null;
+      estado: string | null;
+    };
     cacambas?: { descricao: string };
   };
   motoristas?: { id: number; nome: string; celular: string | null } | null;
@@ -83,12 +107,14 @@ export interface ExecucaoDto {
   pedidoId: number;
   pedidoNumero: string | null;
   pedidoTipo: string | null;
+  valorLocacao: number | null;
   dataProgramada: string | null;
   horaProgramada: string | null;
   dataDesejada: string | null;
   clienteNome: string | null;
   clienteTelefone: string | null;
   obraNome: string | null;
+  obraEndereco: string | null;
   enderecoEntrega: string | null;
   cacambaNumero: string | null;
   rotaParadaId: number | null;
@@ -169,6 +195,8 @@ export interface UpdateStatusExecucaoDto {
 
 export interface ListRotasQuery {
   data?: string;
+  dataInicio?: string;
+  dataFim?: string;
   motoristaId?: number;
   status?: StatusRota;
 }
@@ -188,4 +216,16 @@ export interface CreateParadaDto {
   observacao?: string;
   latitude?: number;
   longitude?: number;
+}
+
+export interface RouteOptimizeInput {
+  origem: { lat: number; lng: number; label?: string };
+  destino: { lat: number; lng: number; label?: string };
+  veiculoId?: number;
+  veiculoTipo?: string;
+  dieselPreco?: number;
+  custoManutencaoKm?: number;
+  custoHoraOperacao?: number;
+  consumoKmLitro?: number;
+  valorLocacao?: number;
 }
